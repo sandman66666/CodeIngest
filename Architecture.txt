@@ -1,0 +1,87 @@
+CodeIngest - Architecture
+
+codeinsight/
+├── .github/ # GitHub workflows and configuration
+│ └── workflows/
+│ ├── ci.yml
+│ └── deploy.yml
+├── client/ # Frontend React application
+│ ├── public/
+│ │ ├── index.html
+│ │ └── assets/
+│ ├── src/
+│ │ ├── components/ # React components
+│ │ │ ├── auth/ # Authentication components
+│ │ │ ├── dashboard/ # Dashboard components
+│ │ │ ├── repository/ # Repository related components
+│ │ │ ├── analysis/ # Analysis result components
+│ │ │ └── common/ # Shared components
+│ │ ├── hooks/ # Custom React hooks
+│ │ ├── services/ # API service modules
+│ │ │ ├── api.ts # Base API configuration
+│ │ │ ├── auth.service.ts # Authentication services
+│ │ │ ├── repo.service.ts # Repository services
+│ │ │ └── analysis.service.ts # Analysis services
+│ │ ├── store/ # State management
+│ │ │ ├── slices/ # Redux slices or context providers
+│ │ │ └── store.ts # Store configuration
+│ │ ├── types/ # TypeScript type definitions
+│ │ ├── utils/ # Utility functions
+│ │ ├── App.tsx # Main App component
+│ │ └── index.tsx # Entry point
+│ ├── .eslintrc.js
+│ ├── tsconfig.json
+│ └── package.json
+├── server/ # Backend Node.js application
+│ ├── src/
+│ │ ├── controllers/ # Request handlers
+│ │ │ ├── auth.controller.ts
+│ │ │ ├── repo.controller.ts
+│ │ │ └── analysis.controller.ts
+│ │ ├── services/ # Business logic
+│ │ │ ├── auth.service.ts
+│ │ │ ├── repo.service.ts
+│ │ │ ├── github.service.ts # GitHub API integration
+│ │ │ ├── claude.service.ts # Claude API integration
+│ │ │ └── analysis.service.ts
+│ │ ├── models/ # Data models
+│ │ │ ├── user.model.ts
+│ │ │ ├── repository.model.ts
+│ │ │ └── analysis.model.ts
+│ │ ├── middleware/ # Express middleware
+│ │ │ ├── auth.middleware.ts
+│ │ │ ├── error.middleware.ts
+│ │ │ └── rate-limit.middleware.ts
+│ │ ├── utils/ # Utility functions
+│ │ │ ├── git.utils.ts # Git operations
+│ │ │ ├── file.utils.ts # File handling
+│ │ │ └── prompt.utils.ts # Claude prompt engineering
+│ │ ├── config/ # Configuration
+│ │ │ ├── env.config.ts
+│ │ │ ├── db.config.ts
+│ │ │ └── api.config.ts
+│ │ ├── routes/ # API routes
+│ │ │ ├── auth.routes.ts
+│ │ │ ├── repo.routes.ts
+│ │ │ └── analysis.routes.ts
+│ │ └── app.ts # Main application setup
+│ ├── .eslintrc.js
+│ ├── tsconfig.json
+│ └── package.json
+├── common/ # Shared code between client and server
+│ ├── src/
+│ │ ├── types/ # Shared type definitions
+│ │ └── constants/ # Shared constants
+│ ├── tsconfig.json
+│ └── package.json
+├── scripts/ # Development and build scripts
+│ ├── setup.sh
+│ └── deploy.sh
+├── docker/ # Docker configuration
+│ ├── Dockerfile.client
+│ ├── Dockerfile.server
+│ └── docker-compose.yml
+├── .gitignore
+├── package.json # Root package.json for workspaces
+├── README.md
+└── tsconfig.json # Base TypeScript configuration

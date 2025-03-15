@@ -1,0 +1,79 @@
+CodeIngest - Spec
+
+Specification for Your Enhanced Version
+
+Product Name: CodeInsight
+
+Product Overview
+
+CodeInsight is a web application that enhances code understanding by leveraging AI to analyze GitHub repositories. Users authenticate with GitHub to access both public and private repositories, then CodeInsight processes the codebase through Claude AI to produce insights, vulnerability reports, and product specifications.
+
+Core Features
+
+1. GitHub Authentication
+     - OAuth integration with GitHub
+    - Access to private and public repositories
+    - User profile and repository management
+
+1. Repository Ingestion
+     - Clone and analyze GitHub repositories
+    - Smart filtering of files (by patterns, size, and type)
+    - Efficient handling of large codebases
+
+1. AI Analysis with Claude
+     - Code review with best practices assessment
+    - Security vulnerability scanning
+    - Identification of key files and components
+    - Generation of product specifications
+
+1. Visualization
+     - Interactive file tree navigator
+    - Code structure visualization
+    - Key insights dashboard
+    - Exportable reports in multiple formats
+
+1. User Management
+     - Save analysis history
+    - Favorite repositories
+    - Share analysis results
+
+User Flow
+
+6. User logs in with GitHub credentials
+7. User selects a repository to analyze
+8. System clones and processes the repository
+9. Claude AI analyzes the codebase
+10. System presents results in an interactive dashboard
+11. User can explore detailed reports, share results, or export specifications
+
+Technical Requirements
+
+12. Frontend
+     - React with TypeScript
+    - Modern UI library (e.g., Material UI or Chakra UI)
+    - Responsive design for mobile and desktop
+
+1. Backend
+     - Node.js with TypeScript
+    - Express or NestJS framework
+    - RESTful API architecture
+
+1. Authentication
+     - GitHub OAuth integration
+    - JWT token-based authentication
+    - Secure credential handling
+
+1. AI Integration
+     - Anthropic Claude API integration
+    - Efficient content chunking for large repositories
+    - Prompt engineering for code analysis
+
+1. Data Storage
+     - MongoDB for user data and analysis results
+    - Redis for caching and rate-limiting
+    - Temporary file storage for repository processing
+
+1. Deployment
+     - Docker containerization
+    - Cloud hosting (AWS, GCP, or Azure)
+    - CI/CD pipeline

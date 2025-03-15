@@ -1,0 +1,301 @@
+
+Entrypoint
+
+async def ingest_async(
+    source: str,
+    max_file_size: int = 10 * 1024 * 1024,  # 10 MB
+    include_patterns: Optional[Union[str, Set[str]]] = None,
+    exclude_patterns: Optional[Union[str, Set[str]]] = None,
+    branch: Optional[str] = None,
+    output: Optional[str] = None,
+) -> Tuple[str, str, str]:
+    """
+    Main entry point for ingesting a source and processing its contents.
+    """
+    repo_cloned = False
+
+    try:
+        query: IngestionQuery = await parse_query(
+            source=source,
+            max_file_size=max_file_size,
+            from_web=False,
+            include_patterns=include_patterns,
+            ignore_patterns=exclude_patterns,
+        )
+
+        if query.url:
+            selected_branch = branch if branch else query.branch  # prioritize branch argument
+            query.branch = selected_branch
+
+            clone_config = query.extract_clone_config()
+            clone_coroutine = clone(clone_config)
+
+            if inspect.iscoroutine(clone_coroutine):
+                if asyncio.get_event_loop().is_running():
+                    await clone_coroutine
+                else:
+                    asyncio.run(clone_coroutine)
+            else:
+                raise TypeError("clone did not return a coroutine as expected.")
+
+            repo_cloned = True
+
+        summary, tree, content = ingest_query(query)
+
+        if output is not None:
+            with open(output, "w", encoding="utf-8") as f:
+                f.write(tree + "\n" + content)
+
+        return summary, tree, content
+    finally:
+        # Clean up the temporary directory if it was created
+        if repo_cloned:
+            shutil.rmtree(TMP_BASE_PATH, ignore_errors=True)
+
+            =====================================================
+            =====================================================
+
+
+    Ingestion 
+
+    def ingest_query(query: IngestionQuery) -> Tuple[str, str, str]:
+    """
+    Run the ingestion process for a parsed query.
+    """
+    subpath = Path(query.subpath.strip("/")).as_posix()
+    path = query.local_path / subpath
+
+    apply_gitingest_file(path, query)
+
+    if not path.exists():
+        raise ValueError(f"{query.slug} cannot be found")
+
+    if (query.type and query.type == "blob") or query.local_path.is_file():
+        # Handle single file case
+        if not path.is_file():
+            raise ValueError(f"Path {path} is not a file")
+
+        relative_path = path.relative_to(query.local_path)
+
+        file_node = FileSystemNode(
+            name=path.name,
+            type=FileSystemNodeType.FILE,
+            size=path.stat().st_size,
+            file_count=1,
+            path_str=str(relative_path),
+            path=path,
+        )
+
+        if not file_node.content:
+            raise ValueError(f"File {file_node.name} has no content")
+
+        return format_node(file_node, query)
+
+    # Handle directory case
+    root_node = FileSystemNode(
+        name=path.name,
+        type=FileSystemNodeType.DIRECTORY,
+        path_str=str(path.relative_to(query.local_path)),
+        path=path,
+    )
+
+    stats = FileSystemStats()
+
+    _process_node(
+        node=root_node,
+        query=query,
+        stats=stats,
+    )
+
+    return format_node(root_node, query)
+
+    ===============================================================
+    ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+    cloning 
+
+    @async_timeout(TIMEOUT)
+async def clone(config: CloneConfig) -> None:
+    """
+    Clone a repository to a local path based on the provided configuration.
+    """
+    # Extract and validate query parameters
+    url: str = config.url
+    local_path: str = config.local_path
+    commit: Optional[str] = config.commit
+    branch: Optional[str] = config.branch
+    partial_clone: bool = config.subpath != "/"
+
+    # Create parent directory if it doesn't exist
+    parent_dir = Path(local_path).parent
+    try:
+        os.makedirs(parent_dir, exist_ok=True)
+    except OSError as exc:
+        raise OSError(f"Failed to create parent directory {parent_dir}: {exc}") from exc
+
+    # Check if the repository exists
+    if not await _check_repo_exists(url):
+        raise ValueError("Repository not found, make sure it is public")
+
+    clone_cmd = ["git", "clone", "--single-branch"]
+    # TODO re-enable --recurse-submodules
+
+    if partial_clone:
+        clone_cmd += ["--filter=blob:none", "--sparse"]
+
+    if not commit:
+        clone_cmd += ["--depth=1"]
+        if branch and branch.lower() not in ("main", "master"):
+            clone_cmd += ["--branch", branch]
+
+    clone_cmd += [url, local_path]
+
+    # Clone the repository
+    await _run_command(*clone_cmd)
+
+    if commit or partial_clone:
+        checkout_cmd = ["git", "-C", local_path]
+
+        if partial_clone:
+            subpath = config.subpath.lstrip("/")
+            if config.blob:
+                # When ingesting from a file url (blob/branch/path/file.txt), we need to remove the file name.
+                subpath = str(Path(subpath).parent.as_posix())
+
+            checkout_cmd += ["sparse-checkout", "set", subpath]
+
+        if commit:
+            checkout_cmd += ["checkout", commit]
+
+        # Check out the specific commit and/or subpath
+        await _run_command(*checkout_cmd)
+
+
+        ====================================================================
+        ====================================================================
+
+        logic for inclusion or not in ingestion 
+
+        def _should_include(path: Path, base_path: Path, include_patterns: Set[str]) -> bool:
+    """
+    Determine if the given file or directory path matches any of the include patterns.
+    """
+    try:
+        rel_path = path.relative_to(base_path)
+    except ValueError:
+        # If path is not under base_path at all
+        return False
+
+    rel_str = str(rel_path)
+    if path.is_dir():
+        rel_str += "/"
+
+    for pattern in include_patterns:
+        if fnmatch(rel_str, pattern):
+            return True
+    return False
+
+
+def _should_exclude(path: Path, base_path: Path, ignore_patterns: Set[str]) -> bool:
+    """
+    Determine if the given file or directory path matches any of the ignore patterns.
+    """
+    try:
+        rel_path = path.relative_to(base_path)
+    except ValueError:
+        # If path is not under base_path at all
+        return True
+
+    rel_str = str(rel_path)
+    for pattern in ignore_patterns:
+        if pattern and fnmatch(rel_str, pattern):
+            return True
+    return False
+
+    ===================================
+    ===================================
+
+    Processing node of files 
+
+    def _process_node(
+    node: FileSystemNode,
+    query: IngestionQuery,
+    stats: FileSystemStats,
+) -> None:
+    """
+    Process a file or directory item within a directory.
+    """
+    if limit_exceeded(stats, node.depth):
+        return
+
+    for sub_path in node.path.iterdir():
+        symlink_path = None
+        if sub_path.is_symlink():
+            if not _is_safe_symlink(sub_path, query.local_path):
+                print(f"Skipping unsafe symlink: {sub_path}")
+                continue
+
+            symlink_path = sub_path
+            sub_path = sub_path.resolve()
+
+        if sub_path in stats.visited:
+            print(f"Skipping already visited path: {sub_path}")
+            continue
+
+        stats.visited.add(sub_path)
+
+        if query.ignore_patterns and _should_exclude(sub_path, query.local_path, query.ignore_patterns):
+            continue
+
+        if query.include_patterns and not _should_include(sub_path, query.local_path, query.include_patterns):
+            continue
+
+        if sub_path.is_file():
+            _process_file(path=sub_path, parent_node=node, stats=stats, local_path=query.local_path)
+        elif sub_path.is_dir():
+            child_directory_node = FileSystemNode(
+                name=sub_path.name,
+                type=FileSystemNodeType.DIRECTORY,
+                path_str=str(sub_path.relative_to(query.local_path)),
+                path=sub_path,
+                depth=node.depth + 1,
+            )
+
+            # rename the subdir to reflect the symlink name
+            if symlink_path:
+                child_directory_node.name = symlink_path.name
+                child_directory_node.path_str = str(symlink_path)
+
+            _process_node(
+                node=child_directory_node,
+                query=query,
+                stats=stats,
+            )
+            node.children.append(child_directory_node)
+            node.size += child_directory_node.size
+            node.file_count += child_directory_node.file_count
+            node.dir_count += 1 + child_directory_node.dir_count
+
+        else:
+            raise ValueError(f"Unexpected error: {sub_path} is neither a file nor a directory")
+
+    node.sort_children()
+
+    Understanding the App Size
+You're absolutely right that the core ingestion logic is not overly complex. The reason the original app is large is because it handles several aspects beyond just ingestion:
+
+Multiple interfaces: CLI, Python module, and web application
+Error handling and edge cases: Dealing with various repository hosts, file types, encodings
+Server components: Web routing, templating, API endpoints
+Caching and optimization: For handling large repositories efficiently
+Output formatting: For making the content LLM-friendly
+
+For your TypeScript/React version, you could simplify this considerably by focusing on:
+
+GitHub authentication
+Repository cloning (using a Git library for Node.js)
+File traversal and filtering (similar to the Python code above)
+Claude API integration for the analysis
+
+The core logic can be translated to TypeScript, and many of the web application concerns can be handled by React and modern web frameworks.
+Would you like me to focus on implementing just this core ingestion logic in TypeScript? That would be a more manageable first step.
