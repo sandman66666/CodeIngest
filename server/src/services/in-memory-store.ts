@@ -6,43 +6,50 @@
 // Types for our in-memory database
 export interface User {
   id: string;
-  username: string;
-  name: string | null;
-  email: string | null;
-  avatarUrl: string;
   githubId: number;
-  accessToken: string;
+  username: string;
+  name?: string | null;
+  email?: string | null;
+  avatarUrl?: string;
+  accessToken?: string;
 }
 
 export interface Repository {
   id: string;
-  userId: string;
-  name: string;
   owner: string;
+  name: string;
   description: string | null;
   url: string;
   language: string | null;
   stargazersCount: number;
   forksCount: number;
   createdAt: Date;
-  updatedAt: Date;
+  userId: string;
+  isPrivate?: boolean;
+  ingestedContent?: {
+    summary: string;
+    tree: string;
+    fullCode: string;
+    fileCount: number;
+    sizeInBytes: number;
+  };
 }
 
 export interface Analysis {
   id: string;
   repositoryId: string;
-  userId: string;
   status: 'pending' | 'in_progress' | 'completed' | 'failed';
-  startedAt: Date;
+  createdAt: Date;
   completedAt: Date | null;
-  insights: Array<{
+  results: any | null;
+  insights?: Array<{
     id: string;
     title: string;
     description: string;
     severity: 'low' | 'medium' | 'high';
     category: string;
   }>;
-  vulnerabilities: Array<{
+  vulnerabilities?: Array<{
     id: string;
     title: string;
     description: string;
@@ -50,16 +57,14 @@ export interface Analysis {
     recommendation: string;
     location: string;
   }>;
-  specification: {
+  specification?: {
     overview: string;
     components: Array<{
       name: string;
       description: string;
       responsibilities: string[];
     }>;
-  } | null;
-  createdAt: Date;
-  updatedAt: Date;
+  };
 }
 
 // Singleton class to manage in-memory data
@@ -75,7 +80,7 @@ class InMemoryStore {
     this.repositories = new Map();
     this.analyses = new Map();
     this.cache = new Map();
-    this.seedDemoData();
+    this.initializeExampleData();
   }
 
   public static getInstance(): InMemoryStore {
@@ -206,119 +211,158 @@ class InMemoryStore {
     this.cache.clear();
   }
 
-  // Seed with some demo data
-  private seedDemoData(): void {
-    // Add a demo user
+  // Initialize with some example data (for development only)
+  private initializeExampleData(): void {
+    // Create demo user
     const demoUser: User = {
       id: 'user-1',
-      username: 'devuser',
-      name: 'Development User',
-      email: 'dev@example.com',
-      avatarUrl: 'https://avatars.githubusercontent.com/u/1?v=4',
-      githubId: 1,
-      accessToken: 'mock-token',
+      username: 'demouser',
+      name: 'Demo User',
+      email: 'demo@example.com',
+      githubId: 123456,
+      avatarUrl: 'https://github.com/identicons/demouser.png',
+      createdAt: new Date()
     };
+    
     this.users.set(demoUser.id, demoUser);
+    
+    // Create example repositories
+    const reactRepo: Repository = {
+      id: 'repo-1',
+      userId: demoUser.id,
+      owner: 'facebook',
+      name: 'react',
+      description: 'A JavaScript library for building user interfaces',
+      url: 'https://github.com/facebook/react',
+      language: 'JavaScript',
+      stargazersCount: 175000,
+      forksCount: 35000,
+      isPrivate: false,
+      ingestedContent: {
+        summary: '# Repository: facebook/react\n\nA powerful JavaScript library for building user interfaces.',
+        tree: "- /src\n  - /components\n    - Component.js\n  - /core\n    - React.js\n  - index.js\n- package.json\n- README.md",
+        fullCode: `// React core implementation
+import { createElement, Component } from './core/React';
 
-    // Add some demo repositories
-    const demoRepos: Repository[] = [
-      {
-        id: 'repo-1',
-        userId: 'user-1',
-        name: 'react',
-        owner: 'facebook',
-        description: 'A JavaScript library for building user interfaces',
-        url: 'https://github.com/facebook/react',
-        language: 'JavaScript',
-        stargazersCount: 200000,
-        forksCount: 40000,
-        createdAt: new Date('2020-01-01'),
-        updatedAt: new Date('2023-06-15'),
-      },
-      {
-        id: 'repo-2',
-        userId: 'user-1',
-        name: 'typescript',
-        owner: 'microsoft',
-        description: 'TypeScript is a superset of JavaScript that compiles to clean JavaScript output',
-        url: 'https://github.com/microsoft/typescript',
-        language: 'TypeScript',
-        stargazersCount: 85000,
-        forksCount: 10000,
-        createdAt: new Date('2020-03-15'),
-        updatedAt: new Date('2023-05-20'),
-      },
-      {
-        id: 'repo-3',
-        userId: 'user-1',
-        name: 'node',
-        owner: 'nodejs',
-        description: 'Node.js JavaScript runtime',
-        url: 'https://github.com/nodejs/node',
-        language: 'JavaScript',
-        stargazersCount: 92000,
-        forksCount: 24000,
-        createdAt: new Date('2020-02-10'),
-        updatedAt: new Date('2023-06-01'),
-      },
-    ];
+function createElement(type, props, ...children) {
+  return {
+    type,
+    props: {
+      ...props,
+      children: children.map(child =>
+        typeof child === 'object' ? child : createTextElement(child)
+      )
+    }
+  };
+}
 
-    demoRepos.forEach(repo => this.repositories.set(repo.id, repo));
+function createTextElement(text) {
+  return {
+    type: 'TEXT_ELEMENT',
+    props: {
+      nodeValue: text,
+      children: []
+    }
+  };
+}
 
-    // Add a demo analysis
-    const demoAnalysis: Analysis = {
-      id: 'analysis-1',
-      repositoryId: 'repo-1',
-      userId: 'user-1',
-      status: 'completed',
-      startedAt: new Date('2023-06-16T10:00:00Z'),
-      completedAt: new Date('2023-06-16T10:05:00Z'),
-      insights: [
-        {
-          id: 'insight-1',
-          title: 'Extensive use of React Hooks',
-          description: 'The codebase makes extensive use of React Hooks, which improves code reusability and simplifies state management.',
-          severity: 'low',
-          category: 'best_practice',
-        },
-        {
-          id: 'insight-2',
-          title: 'Missing error handling in asynchronous operations',
-          description: 'Several components lack proper error handling for async operations, which could lead to unexpected behavior.',
-          severity: 'medium',
-          category: 'error_handling',
-        },
-      ],
-      vulnerabilities: [
-        {
-          id: 'vuln-1',
-          title: 'Potential XSS vulnerability',
-          description: 'The application uses dangerouslySetInnerHTML without proper input sanitization.',
-          severity: 'high',
-          recommendation: 'Implement a proper sanitization library like DOMPurify before rendering user-generated content.',
-          location: 'src/components/UserContent.jsx:42',
-        },
-      ],
-      specification: {
-        overview: 'React is a JavaScript library for building user interfaces, particularly single-page applications.',
-        components: [
-          {
-            name: 'React Core',
-            description: 'The core React library that provides component-based architecture.',
-            responsibilities: ['Virtual DOM', 'Component lifecycle', 'State management'],
-          },
-          {
-            name: 'React DOM',
-            description: 'Renderer for web applications that enables React components to interact with the DOM.',
-            responsibilities: ['DOM updates', 'Event handling', 'Browser compatibility'],
-          },
-        ],
+class Component {
+  constructor(props) {
+    this.props = props;
+    this.state = {};
+  }
+  
+  setState(partialState) {
+    this.state = { ...this.state, ...partialState };
+    // Trigger re-render
+  }
+  
+  render() {
+    // Override in subclass
+  }
+}
+
+export default {
+  createElement,
+  Component
+};`,
+        fileCount: 15,
+        sizeInBytes: 2500
       },
-      createdAt: new Date('2023-06-16T10:00:00Z'),
-      updatedAt: new Date('2023-06-16T10:05:00Z'),
+      createdAt: new Date()
     };
+    
+    const typescriptRepo: Repository = {
+      id: 'repo-2',
+      userId: demoUser.id,
+      owner: 'microsoft',
+      name: 'typescript',
+      description: 'TypeScript is a superset of JavaScript that compiles to clean JavaScript output',
+      url: 'https://github.com/microsoft/TypeScript',
+      language: 'TypeScript',
+      stargazersCount: 75000,
+      forksCount: 10000,
+      isPrivate: false,
+      ingestedContent: {
+        summary: '# Repository: microsoft/typescript\n\nA typed superset of JavaScript that compiles to plain JavaScript.',
+        tree: "- /src\n  - /compiler\n    - checker.ts\n    - parser.ts\n  - /services\n    - formatting.ts\n  - index.ts\n- package.json\n- README.md",
+        fullCode: `// TypeScript compiler implementation
+namespace ts {
+  export interface CompilerOptions {
+    target?: ScriptTarget;
+    module?: ModuleKind;
+    strict?: boolean;
+    outDir?: string;
+    rootDir?: string;
+    sourceMap?: boolean;
+    declaration?: boolean;
+  }
+  
+  export enum ScriptTarget {
+    ES3 = 0,
+    ES5 = 1,
+    ES2015 = 2,
+    ES2016 = 3,
+    ES2017 = 4,
+    ES2018 = 5,
+    ES2019 = 6,
+    ES2020 = 7,
+    ESNext = 8
+  }
+  
+  export enum ModuleKind {
+    None = 0,
+    CommonJS = 1,
+    AMD = 2,
+    UMD = 3,
+    System = 4,
+    ES2015 = 5,
+    ESNext = 6
+  }
+  
+  export function createProgram(rootNames: string[], options: CompilerOptions) {
+    // Parse source files
+    // Check types
+    // Emit JavaScript
+    return {
+      // Program implementation
+    };
+  }
+  
+  export function parseJsonConfigFileContent(json: any, host: any, basePath: string) {
+    // Parse tsconfig.json
+  }
+}
 
-    this.analyses.set(demoAnalysis.id, demoAnalysis);
+export = ts;`,
+        fileCount: 25,
+        sizeInBytes: 3800
+      },
+      createdAt: new Date()
+    };
+    
+    this.repositories.set(reactRepo.id, reactRepo);
+    this.repositories.set(typescriptRepo.id, typescriptRepo);
   }
 }
 

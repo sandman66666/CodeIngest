@@ -4,6 +4,7 @@ import { LoginPage } from './pages/LoginPage';
 import { RepositoryPage } from './pages/RepositoryPage';
 import { AuthCallbackPage } from './pages/AuthCallbackPage';
 import { useAuth } from './contexts/AuthContext';
+import AnalysisPage from './pages/AnalysisPage';
 
 export function AppRoutes() {
   const { isAuthenticated } = useAuth();
@@ -29,6 +30,10 @@ export function AppRoutes() {
         element={
           isAuthenticated ? <RepositoryPage /> : <Navigate to="/login" replace />
         }
+      />
+      <Route
+        path="/analysis/:analysisId"
+        element={<AnalysisPage />}
       />
     </Routes>
   );
