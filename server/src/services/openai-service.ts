@@ -87,7 +87,7 @@ Identify at least 6-8 substantive issues to provide a thorough review. Focus on 
     const response = await axios.post(
       'https://api.openai.com/v1/chat/completions',
       {
-        model: "gpt-3.5-turbo",
+        model: "o3-mini-high",
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3,
         max_tokens: 2000
@@ -120,23 +120,13 @@ Identify at least 6-8 substantive issues to provide a thorough review. Focus on 
       } catch (parseError) {
         console.error("Error parsing OpenAI response:", parseError);
         console.error("Failed to parse content:", content);
-        // Fallback to a simple format if parsing fails
-        return {
-          insights: [
-            {
-              title: "Analysis completed",
-              description: "The code has been analyzed but the results could not be properly formatted.",
-              severity: "medium",
-              category: "code_quality"
-            }
-          ]
-        };
+        throw new Error("Failed to parse OpenAI response");
       }
     } else {
       throw new Error(`OpenAI API returned status ${response.status}`);
     }
   } catch (error) {
-    console.error("Error analyzing code with OpenAI:", error);
+    console.error("OpenAI API error:", error);
     
     if (axios.isAxiosError(error) && error.response) {
       console.error("OpenAI API response status:", error.response.status);
