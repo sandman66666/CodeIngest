@@ -16,10 +16,10 @@ router.get('/github', (_req, res) => {
   res.redirect(githubAuthUrl);
 });
 
-router.post('/github/callback', async (req, res) => {
-  const { code } = req.body;
+router.get('/github/callback', async (req, res) => {
+  const { code } = req.query as { code: string };
   if (!code) {
-    throw new ApiError(400, 'Authorization code is required');
+    return res.redirect(`${process.env.REACT_APP_CLIENT_URL || 'http://localhost:3001'}/login?error=missing_code`);
   }
 
   try {
@@ -39,7 +39,7 @@ router.post('/github/callback', async (req, res) => {
 
     const tokenData = await tokenResponse.json();
     if (tokenData.error) {
-      throw new ApiError(401, tokenData.error_description || 'Failed to get access token');
+      return res.redirect(`${process.env.REACT_APP_CLIENT_URL || 'http://localhost:3001'}/login?error=${tokenData.error}`);
     }
 
     // Get user data from GitHub
@@ -51,7 +51,7 @@ router.post('/github/callback', async (req, res) => {
 
     const userData = await userResponse.json();
     if (userResponse.status !== 200) {
-      throw new ApiError(401, 'Failed to get user data from GitHub');
+      return res.redirect(`${process.env.REACT_APP_CLIENT_URL || 'http://localhost:3001'}/login?error=github_api_error`);
     }
 
     // Create session
@@ -72,23 +72,11 @@ router.post('/github/callback', async (req, res) => {
       { expiresIn: '7d', algorithm: 'HS256' }
     );
 
-    res.json({
-      status: 'success',
-      data: {
-        token,
-        user: {
-          id: userData.id,
-          username: userData.login,
-          name: userData.name,
-          avatarUrl: userData.avatar_url,
-        },
-      },
-    });
+    // Redirect back to the client with the token
+    return res.redirect(`${process.env.REACT_APP_CLIENT_URL || 'http://localhost:3001'}/auth/callback?token=${token}`);
   } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
-    throw new ApiError(500, 'Authentication failed');
+    console.error('Authentication error:', error);
+    return res.redirect(`${process.env.REACT_APP_CLIENT_URL || 'http://localhost:3001'}/login?error=server_error`);
   }
 });
 
@@ -99,25 +87,31 @@ router.get('/profile', async (req, res) => {
   }
 
   const token = authHeader.split(' ')[1];
+  
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret') as { sessionId: string };
-    const userData = userSessions.get(decoded.sessionId);
+    const sessionId = decoded.sessionId;
     
+    const userData = userSessions.get(sessionId);
     if (!userData) {
       throw new ApiError(401, 'Invalid session');
     }
-
-    res.json({
+    
+    return res.json({
       status: 'success',
       data: {
         id: userData.id,
-        username: userData.username,
+        login: userData.username,
         name: userData.name,
+        email: userData.email,
         avatarUrl: userData.avatarUrl,
       },
     });
   } catch (error) {
-    throw new ApiError(401, 'Invalid token');
+    if (error instanceof jwt.JsonWebTokenError) {
+      throw new ApiError(401, 'Invalid token');
+    }
+    throw error;
   }
 });
 

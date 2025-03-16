@@ -7,11 +7,14 @@ import {
   Text,
   VStack,
   useColorModeValue,
+  Tabs, TabList, TabPanels, Tab, TabPanel,
+  Divider
 } from '@chakra-ui/react';
 import { FiGitBranch, FiStar } from 'react-icons/fi';
 import { Link as RouterLink } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { SimpleRepositoryIngest } from '../components/SimpleRepositoryIngest';
 
 interface Repository {
   id: number;
@@ -35,7 +38,7 @@ export function DashboardPage() {
   const fetchRepositories = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3000/api/repos', {
+      const response = await fetch('http://localhost:3030/api/repositories', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -46,7 +49,7 @@ export function DashboardPage() {
       }
 
       const data = await response.json();
-      setRepositories(data.data);
+      setRepositories(data.repositories || []);
     } catch (error) {
       console.error('Error fetching repositories:', error);
     } finally {
@@ -57,64 +60,82 @@ export function DashboardPage() {
   return (
     <VStack spacing={8} align="stretch">
       <Box>
-        <Heading size="lg">Welcome, {user?.name}</Heading>
+        <Heading size="lg">Welcome, {user?.name || user?.login}</Heading>
         <Text mt={2} color="gray.500">
-          Select a repository to analyze with AI
+          Analyze GitHub repositories with AI
         </Text>
       </Box>
-
-      <Grid
-        templateColumns={{
-          base: '1fr',
-          md: 'repeat(2, 1fr)',
-          lg: 'repeat(3, 1fr)',
-        }}
-        gap={6}
-      >
-        {repositories.map((repo) => (
-          <Box
-            key={repo.id}
-            p={6}
-            bg={cardBg}
-            rounded="lg"
-            shadow="sm"
-            borderWidth={1}
-            transition="all 0.2s"
-            _hover={{ shadow: 'md', transform: 'translateY(-2px)' }}
-          >
-            <VStack align="stretch" spacing={4}>
-              <Heading size="md" noOfLines={1}>
-                {repo.name}
-              </Heading>
-              {repo.description && (
-                <Text color="gray.500" noOfLines={2}>
-                  {repo.description}
-                </Text>
-              )}
-              <Box>
-                {repo.language && (
-                  <Text fontSize="sm" color="gray.500">
-                    {repo.language}
-                  </Text>
-                )}
-                <Text fontSize="sm" color="gray.500">
-                  <Icon as={FiStar} mr={1} />
-                  {repo.stars} stars
-                </Text>
-              </Box>
-              <Button
-                as={RouterLink}
-                to={`/repository/${repo.fullName}`}
-                leftIcon={<Icon as={FiGitBranch} />}
-                size="sm"
-                width="full"
+      
+      <Tabs variant="enclosed" colorScheme="blue">
+        <TabList>
+          <Tab>Add Repository</Tab>
+          <Tab>My Repositories</Tab>
+        </TabList>
+        <TabPanels>
+          <TabPanel>
+            <SimpleRepositoryIngest />
+          </TabPanel>
+          <TabPanel>
+            {repositories.length > 0 ? (
+              <Grid
+                templateColumns={{
+                  base: '1fr',
+                  md: 'repeat(2, 1fr)',
+                  lg: 'repeat(3, 1fr)',
+                }}
+                gap={6}
               >
-                Analyze Repository
-              </Button>
-            </VStack>
-          </Box>
-        ))}
-      </Grid>
+                {repositories.map((repo) => (
+                  <Box
+                    key={repo.id}
+                    p={6}
+                    bg={cardBg}
+                    rounded="lg"
+                    shadow="sm"
+                    borderWidth={1}
+                    transition="all 0.2s"
+                    _hover={{ shadow: 'md', transform: 'translateY(-2px)' }}
+                  >
+                    <VStack align="stretch" spacing={4}>
+                      <Heading size="md" noOfLines={1}>
+                        {repo.name}
+                      </Heading>
+                      {repo.description && (
+                        <Text color="gray.500" noOfLines={2}>
+                          {repo.description}
+                        </Text>
+                      )}
+                      <Box>
+                        {repo.language && (
+                          <Text fontSize="sm" color="gray.500">
+                            {repo.language}
+                          </Text>
+                        )}
+                        <Text fontSize="sm" color="gray.500">
+                          <Icon as={FiStar} mr={1} />
+                          {repo.stars} stars
+                        </Text>
+                      </Box>
+                      <Button
+                        as={RouterLink}
+                        to={`/repository/${repo.fullName}`}
+                        colorScheme="blue"
+                        size="sm"
+                      >
+                        View Analysis
+                      </Button>
+                    </VStack>
+                  </Box>
+                ))}
+              </Grid>
+            ) : (
+              <Box textAlign="center" py={10}>
+                <Text>No repositories found. Add a repository to get started.</Text>
+              </Box>
+            )}
+          </TabPanel>
+        </TabPanels>
+      </Tabs>
     </VStack>
   );
 }

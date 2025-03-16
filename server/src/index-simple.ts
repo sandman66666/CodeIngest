@@ -5,11 +5,15 @@ import bodyParser from 'body-parser';
 import path from 'path';
 import InMemoryStore, { Repository, Analysis } from './services/in-memory-store';
 import axios from 'axios';
+import jwt from 'jsonwebtoken';
 
 // Initialize the express application
 const app = express();
 const port = process.env.PORT || 3030;
 const store = InMemoryStore.getInstance();
+
+// In-memory storage for user sessions
+const userSessions = new Map<string, any>();
 
 // Middleware
 app.use(cors({
@@ -22,6 +26,109 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Basic health check endpoint
 app.get('/api/health', (_req: Request, res: Response) => {
   return res.json({ status: 'healthy', message: 'Server is running in simplified mode with in-memory storage' });
+});
+
+// GitHub OAuth routes
+app.get('/api/auth/github', (_req: Request, res: Response) => {
+  const clientId = process.env.GITHUB_CLIENT_ID;
+  const redirectUri = process.env.GITHUB_CALLBACK_URL;
+  const scope = 'repo read:user user:email';
+  
+  const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`;
+  res.redirect(githubAuthUrl);
+});
+
+app.get('/api/auth/github/callback', async (req: Request, res: Response) => {
+  const { code } = req.query as { code: string };
+  if (!code) {
+    return res.redirect(`http://localhost:3001/login?error=missing_code`);
+  }
+
+  try {
+    // Exchange code for access token
+    const tokenResponse = await axios.post('https://github.com/login/oauth/access_token', {
+      client_id: process.env.GITHUB_CLIENT_ID,
+      client_secret: process.env.GITHUB_CLIENT_SECRET,
+      code,
+    }, {
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+
+    const tokenData = tokenResponse.data;
+    if (tokenData.error) {
+      return res.redirect(`http://localhost:3001/login?error=${tokenData.error}`);
+    }
+
+    // Get user data from GitHub
+    const userResponse = await axios.get('https://api.github.com/user', {
+      headers: {
+        'Authorization': `Bearer ${tokenData.access_token}`
+      }
+    });
+
+    const userData = userResponse.data;
+    if (!userData) {
+      return res.redirect(`http://localhost:3001/login?error=github_api_error`);
+    }
+
+    // Create session
+    const sessionId = Math.random().toString(36).substring(2);
+    userSessions.set(sessionId, {
+      id: userData.id,
+      username: userData.login,
+      email: userData.email,
+      name: userData.name,
+      avatarUrl: userData.avatar_url,
+      accessToken: tokenData.access_token,
+    });
+
+    // Create JWT
+    const token = jwt.sign(
+      { sessionId },
+      process.env.JWT_SECRET || 'default-secret',
+      { expiresIn: '7d' }
+    );
+
+    // Redirect back to the client with the token
+    return res.redirect(`http://localhost:3001/auth/callback?token=${token}`);
+  } catch (error) {
+    console.error('Authentication error:', error);
+    return res.redirect(`http://localhost:3001/login?error=server_error`);
+  }
+});
+
+app.get('/api/auth/profile', async (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret') as { sessionId: string };
+    const sessionId = decoded.sessionId;
+    
+    const userData = userSessions.get(sessionId);
+    if (!userData) {
+      return res.status(401).json({ error: 'Invalid session' });
+    }
+    
+    return res.json({
+      status: 'success',
+      data: {
+        id: userData.id,
+        login: userData.username,
+        name: userData.name,
+        email: userData.email,
+        avatarUrl: userData.avatarUrl,
+      },
+    });
+  } catch (error) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
 });
 
 // Authentication endpoints
@@ -111,15 +218,35 @@ app.post('/api/repositories', (req: Request, res: Response) => {
 
 // New endpoint to ingest public GitHub repositories without login
 app.post('/api/public-repositories', async (req: Request, res: Response) => {
-  const { owner, name } = req.body;
+  const { owner, name, url } = req.body;
   
-  if (!owner || !name) {
-    return res.status(400).json({ error: 'Owner and name are required' });
+  let repoOwner = owner;
+  let repoName = name;
+  
+  // If URL is provided, parse owner and name from it
+  if (url && (!owner || !name)) {
+    try {
+      const githubUrlPattern = /github\.com\/([^\/]+)\/([^\/]+)/;
+      const match = url.match(githubUrlPattern);
+      
+      if (!match) {
+        return res.status(400).json({ error: 'Invalid GitHub URL format' });
+      }
+      
+      repoOwner = match[1];
+      repoName = match[2].replace('.git', ''); // Remove .git if present
+    } catch (error) {
+      return res.status(400).json({ error: 'Could not parse GitHub URL' });
+    }
+  }
+  
+  if (!repoOwner || !repoName) {
+    return res.status(400).json({ error: 'Repository owner and name are required' });
   }
   
   try {
     // Check if the repository exists on GitHub
-    const githubResponse = await axios.get(`https://api.github.com/repos/${owner}/${name}`);
+    const githubResponse = await axios.get(`https://api.github.com/repos/${repoOwner}/${repoName}`);
     const repoData = githubResponse.data;
     
     if (!repoData) {
@@ -130,7 +257,7 @@ app.post('/api/public-repositories', async (req: Request, res: Response) => {
     const userId = store.getUsers()[0].id;
     
     // Check if repository already exists in our system
-    const existingRepo = store.getRepositoryByOwnerAndName(userId, owner, name);
+    const existingRepo = store.getRepositoryByOwnerAndName(userId, repoOwner, repoName);
     
     if (existingRepo) {
       return res.status(200).json({ repository: existingRepo, message: 'Repository already exists' });
@@ -140,9 +267,9 @@ app.post('/api/public-repositories', async (req: Request, res: Response) => {
     const newRepo: Repository = {
       id: `repo-${uuidv4()}`,
       userId,
-      owner,
-      name,
-      description: repoData.description || `${name} repository`,
+      owner: repoOwner,
+      name: repoName,
+      description: repoData.description || `${repoName} repository`,
       url: repoData.html_url,
       language: repoData.language || 'Unknown',
       stargazersCount: repoData.stargazers_count || 0,
