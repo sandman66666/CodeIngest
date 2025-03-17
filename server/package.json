@@ -11,8 +11,10 @@
     "test": "jest"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^1.2.5",
     "@anthropic-ai/sdk": "^0.10.2",
     "@octokit/rest": "^21.1.1",
+    "ai": "^4.1.61",
     "axios": "^1.8.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",

@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
 
-import InMemoryStore from './services/in-memory-store';
+import InMemoryStore, { Analysis } from './services/in-memory-store';
 import { ingestRepository } from './services/code-ingestion';
 import { analyzeCodeWithOpenAI } from './services/openai-service';
 import privateRepositoriesRouter from './routes/private-repositories';
@@ -20,11 +20,10 @@ dotenv.config();
  * @returns Formatted API key
  */
 function validateApiKey(apiKey: string): string {
-  const formattedKey = apiKey.trim();
-  if (!formattedKey) {
+  if (!apiKey) {
     throw new Error('API key is required');
   }
-  return formattedKey;
+  return apiKey.trim();
 }
 
 // Initialize the express application
@@ -365,7 +364,7 @@ export default App;`;
     store.createRepository(repository);
 
     const analysisId = uuidv4();
-    const analysis = {
+    const analysis: Analysis = {
       id: analysisId,
       repositoryId: repository.id,
       status: 'pending',
@@ -378,19 +377,19 @@ export default App;`;
     
     // Simulate analysis completion after 5 seconds
     setTimeout(() => {
-      const updatedAnalysis = {
+      const updatedAnalysis: Partial<Analysis> = {
         status: 'completed',
         completedAt: new Date(),
         results: [
           {
-            id: `result-${uuidv4()}`,
+            id: uuidv4(),
             title: 'Good code organization',
             description: `The ${repository.name} codebase has a clear structure with separate concerns.`,
             severity: 'low',
             category: 'best_practice'
           },
           {
-            id: `result-${uuidv4()}`,
+            id: uuidv4(),
             title: 'Missing test coverage',
             description: 'Some critical components lack proper test coverage.',
             severity: 'medium',
@@ -462,10 +461,8 @@ app.post('/api/repositories/:repositoryId/analyses', (req: Request, res: Respons
     return res.status(404).json({ error: 'Repository not found' });
   }
   
-  const userId = store.getUsers()[0].id;
-  
   // Create a new analysis with pending status
-  const newAnalysis = {
+  const newAnalysis: Analysis = {
     id: `analysis-${uuidv4()}`,
     repositoryId,
     status: 'pending',
@@ -482,23 +479,23 @@ app.post('/api/repositories/:repositoryId/analyses', (req: Request, res: Respons
   
   // Simulate analysis completion after 5 seconds
   setTimeout(() => {
-    const updatedAnalysis = {
+    const updatedAnalysis: Partial<Analysis> = {
       status: 'completed',
       completedAt: new Date(),
       results: [
         {
-          id: `result-${uuidv4()}`,
-          title: 'Good code organization',
-          description: 'The codebase has a clear structure with separate concerns.',
+          id: uuidv4(),
+          title: 'Code Quality Issue',
+          description: 'Mock: The code has inconsistent formatting.',
           severity: 'low',
-          category: 'best_practice'
+          category: 'code_quality'
         },
         {
-          id: `result-${uuidv4()}`,
-          title: 'Missing test coverage',
-          description: 'Some critical components lack proper test coverage.',
-          severity: 'medium',
-          category: 'testing'
+          id: uuidv4(),
+          title: 'Potential Security Vulnerability',
+          description: 'Mock: There might be an XSS vulnerability in the input handling.',
+          severity: 'high',
+          category: 'security'
         }
       ]
     };
@@ -523,7 +520,7 @@ app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
   try {
     // Create a new analysis
     const analysisId = `analysis-${uuidv4()}`;
-    const newAnalysis = {
+    const newAnalysis: Analysis = {
       id: analysisId,
       repositoryId,
       status: 'pending',
@@ -550,19 +547,20 @@ app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
       );
 
       // Update analysis with results
-      const updatedAnalysis = {
+      const updatedAnalysis: Partial<Analysis> = {
         status: 'completed',
         completedAt: new Date(),
         results: analysisResults.insights.map(insight => ({
           id: `result-${uuidv4()}`,
           title: insight.title,
           description: insight.description,
-          severity: insight.severity,
+          severity: insight.severity as 'low' | 'medium' | 'high',
           category: insight.category
         }))
       };
       
       store.updateAnalysis(analysisId, updatedAnalysis);
+      return; // Explicitly return to satisfy TypeScript
       
     } catch (error) {
       console.error("Error in code analysis:", error);
@@ -574,16 +572,64 @@ app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
         results: [{
           id: `error-${uuidv4()}`,
           title: 'Analysis Error',
-          description: `Failed to analyze code: ${error.message}`,
+          description: `Failed to analyze code: ${error instanceof Error ? error.message : String(error)}`,
           severity: 'high',
           category: 'error'
         }]
       });
+      return; // Explicitly return to satisfy TypeScript
     }
   } catch (error) {
     console.error("Error initiating analysis:", error);
     res.status(500).json({ error: 'Failed to initiate analysis' });
+    return; // Explicitly return to satisfy TypeScript
   }
+});
+
+// Mock analysis endpoint (for development only)
+app.post('/api/analysis/mock/:repositoryId', (req: Request, res: Response) => {
+  const { repositoryId } = req.params;
+  
+  // Create a new analysis with pending status
+  const newAnalysis: Analysis = {
+    id: `analysis-${uuidv4()}`,
+    repositoryId,
+    status: 'pending',
+    createdAt: new Date(),
+    completedAt: null,
+    results: null
+  };
+  
+  store.createAnalysis(newAnalysis);
+  
+  // Return the analysis ID
+  res.status(202).json({ analysisId: newAnalysis.id });
+  
+  // Simulate analysis completion after 5 seconds
+  setTimeout(() => {
+    const updatedAnalysis: Partial<Analysis> = {
+      status: 'completed',
+      completedAt: new Date(),
+      results: [
+        {
+          id: `result-${uuidv4()}`,
+          title: 'Code Quality Issue',
+          description: 'This is a mock analysis result. The code has inconsistent formatting.',
+          severity: 'low',
+          category: 'code_quality'
+        },
+        {
+          id: `result-${uuidv4()}`,
+          title: 'Potential Security Vulnerability',
+          description: 'This is a mock analysis result. There might be an XSS vulnerability in your input handling.',
+          severity: 'high',
+          category: 'security'
+        }
+      ]
+    };
+    
+    store.updateAnalysis(newAnalysis.id, updatedAnalysis);
+  }, 5000);
 });
 
 app.use('/api/private-repositories', privateRepositoriesRouter);
