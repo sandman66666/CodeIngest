@@ -119,10 +119,10 @@ export function PublicRepositoryIngest() {
       setIsLoading(true);
       setAnalysisStarted(true);
       
-      // Use Claude API key from environment or provide it directly
+      // Use OpenAI API key from environment or provide it directly
       // Note: In production, this should be provided securely from an environment variable
       const response = await axios.post(`http://localhost:3030/api/analysis/${ingestionResult.repository.id}`, {
-        apiKey: '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'
+        apiKey: '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'
       });
       
       setAnalysisId(response.data.analysisId);

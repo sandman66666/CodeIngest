@@ -5,7 +5,6 @@ import { v4 as uuidv4 } from 'uuid';
 import dotenv from 'dotenv';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
-
 import InMemoryStore, { Analysis } from './services/in-memory-store';
 import { ingestRepository } from './services/code-ingestion';
 import { analyzeCodeWithOpenAI } from './services/openai-service';
@@ -13,18 +12,6 @@ import privateRepositoriesRouter from './routes/private-repositories';
 
 // Load environment variables from .env file
 dotenv.config();
-
-/**
- * Validates and formats the API key
- * @param apiKey API key to validate
- * @returns Formatted API key
- */
-function validateApiKey(apiKey: string): string {
-  if (!apiKey) {
-    throw new Error('API key is required');
-  }
-  return apiKey.trim();
-}
 
 // Initialize the express application
 const app = express();
@@ -517,6 +504,30 @@ app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Repository not found' });
   }
   
+  // Log received API key format (partially masked for security)
+  if (apiKey) {
+    const maskedKey = apiKey.substring(0, 7) + '...' + (apiKey.length > 10 ? apiKey.substring(apiKey.length - 3) : '');
+    console.log(`Received API key format: ${maskedKey}`);
+  } else {
+    console.log('No API key provided in request');
+  }
+  
+  // Check for a valid API key - first try request body, then environment variable
+  let openaiApiKey = apiKey;
+  
+  // If no API key in request, or it's a placeholder, try to use the one from environment
+  if (!openaiApiKey || openaiApiKey.includes('placeholder')) {
+    console.log('Using API key from environment variable');
+    openaiApiKey = process.env.OPENAI_API_KEY || '';
+    
+    if (!openaiApiKey) {
+      return res.status(400).json({ 
+        error: 'No valid API key provided and no API key found in environment variables',
+        details: 'Please provide a valid OpenAI API key or set the OPENAI_API_KEY environment variable'
+      });
+    }
+  }
+  
   try {
     // Create a new analysis
     const analysisId = `analysis-${uuidv4()}`;
@@ -542,7 +553,7 @@ app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
       
       // Use OpenAI instead of Claude for analysis
       const analysisResults = await analyzeCodeWithOpenAI(
-        validateApiKey(apiKey),
+        openaiApiKey,
         repository
       );
 
@@ -560,6 +571,7 @@ app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
       };
       
       store.updateAnalysis(analysisId, updatedAnalysis);
+      console.log(`Analysis ${analysisId} for repository ${repository.owner}/${repository.name} completed successfully`);
       return; // Explicitly return to satisfy TypeScript
       
     } catch (error) {
