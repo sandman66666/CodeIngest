@@ -512,12 +512,14 @@ app.post('/api/repositories/:repositoryId/analyses', (req: Request, res: Respons
 
 app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
   const { repositoryId } = req.params;
+  const { apiKey } = req.body;
+  
+  // Validate repository exists
   const repository = store.getRepositoryById(repositoryId);
-
   if (!repository) {
     return res.status(404).json({ error: 'Repository not found' });
   }
-
+  
   try {
     // Create a new analysis
     const analysisId = `analysis-${uuidv4()}`;
@@ -532,27 +534,15 @@ app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
     
     store.createAnalysis(newAnalysis);
     
-    // Get API key from environment variables or request body
-    const apiKey = process.env.OPENAI_API_KEY || req.body.apiKey;
-    
-    if (!apiKey) {
-      return res.status(400).json({ 
-        error: 'API key is required. Either set OPENAI_API_KEY in the .env file or provide apiKey in the request body.'
-      });
-    }
-
-    // Send response immediately to prevent timeout
-    res.status(201).json({
+    // Send the initial response with the analysis ID
+    res.status(202).json({
       message: 'Analysis started',
       analysisId
     });
-
-    // Run analysis asynchronously
+    
     try {
-      if (!repository.ingestedContent || !repository.ingestedContent.fullCode) {
-        throw new Error('Repository has no ingested content');
-      }
-
+      console.log("Sending request to OpenAI API...");
+      
       // Use OpenAI instead of Claude for analysis
       const analysisResults = await analyzeCodeWithOpenAI(
         validateApiKey(apiKey),
@@ -567,54 +557,32 @@ app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
           id: `result-${uuidv4()}`,
           title: insight.title,
           description: insight.description,
-          severity: insight.severity as 'low' | 'medium' | 'high',
+          severity: insight.severity,
           category: insight.category
         }))
       };
-
+      
       store.updateAnalysis(analysisId, updatedAnalysis);
-    } catch (analysisError) {
-      console.error('Analysis failed:', analysisError);
       
-      // Instead of just returning an error, provide mock results
-      // This allows the frontend to show useful information even when the API fails
-      const mockResults = [
-        {
-          id: `result-${uuidv4()}`,
-          title: 'Well-organized Component Structure',
-          description: `The ${repository.name} codebase demonstrates a clear component hierarchy with good separation of concerns. Components are logically organized and follow a consistent pattern.`,
-          severity: 'low',
-          category: 'architecture'
-        },
-        {
-          id: `result-${uuidv4()}`,
-          title: 'Consider Adding Additional Test Coverage',
-          description: 'While the codebase has some tests, critical components would benefit from additional unit and integration tests to ensure reliability and prevent regressions.',
-          severity: 'medium',
-          category: 'testing'
-        },
-        {
-          id: `result-${uuidv4()}`,
-          title: 'Potential Performance Optimization',
-          description: 'There are opportunities to optimize rendering performance by implementing memoization for expensive calculations and preventing unnecessary re-renders.',
-          severity: 'medium',
-          category: 'performance'
-        }
-      ];
+    } catch (error) {
+      console.error("Error in code analysis:", error);
       
-      // Update analysis with mock results
+      // Update analysis with error status
       store.updateAnalysis(analysisId, {
-        status: 'completed', // Mark as completed instead of failed
+        status: 'failed',
         completedAt: new Date(),
-        results: mockResults
+        results: [{
+          id: `error-${uuidv4()}`,
+          title: 'Analysis Error',
+          description: `Failed to analyze code: ${error.message}`,
+          severity: 'high',
+          category: 'error'
+        }]
       });
-      
-      // Log that we're using mock results
-      console.log(`Using mock analysis results for ${repository.owner}/${repository.name} due to API failure`);
     }
   } catch (error) {
-    console.error('Error starting analysis:', error);
-    return res.status(500).json({ error: 'Failed to start analysis' });
+    console.error("Error initiating analysis:", error);
+    res.status(500).json({ error: 'Failed to initiate analysis' });
   }
 });
 
