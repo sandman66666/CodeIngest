@@ -119,10 +119,10 @@ export function PublicRepositoryIngest() {
       setIsLoading(true);
       setAnalysisStarted(true);
       
-      // Use OpenAI API key from environment or provide it directly
-      // Note: In production, this should be provided securely from an environment variable
+      // Use OpenAI API key from environment variable in production
+      // For development, the key should be configured on the server-side
       const response = await axios.post(`http://localhost:3030/api/analysis/${ingestionResult.repository.id}`, {
-        apiKey: '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'
+        apiKey: '' // Empty string will make the server use its environment variable
       });
       
       setAnalysisId(response.data.analysisId);
