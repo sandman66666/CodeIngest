@@ -572,8 +572,7 @@ app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
       
       store.updateAnalysis(analysisId, updatedAnalysis);
       console.log(`Analysis ${analysisId} for repository ${repository.owner}/${repository.name} completed successfully`);
-      return; // Explicitly return to satisfy TypeScript
-      
+      return res.status(200).json({ message: 'Analysis completed successfully' }); // Return statement added here
     } catch (error) {
       console.error("Error in code analysis:", error);
       
@@ -589,12 +588,11 @@ app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
           category: 'error'
         }]
       });
-      return; // Explicitly return to satisfy TypeScript
+      return res.status(500).json({ error: 'Analysis failed' }); // Return statement added here
     }
   } catch (error) {
     console.error("Error initiating analysis:", error);
-    res.status(500).json({ error: 'Failed to initiate analysis' });
-    return; // Explicitly return to satisfy TypeScript
+    return res.status(500).json({ error: 'Failed to initiate analysis' });
   }
 });
 

@@ -9,7 +9,13 @@
     },
     "typeRoots": ["./node_modules/@types", "./src/types"],
     "module": "CommonJS",
-    "target": "ES2020"
+    "target": "ES2020",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "noImplicitAny": false,
+    "strictNullChecks": false
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]

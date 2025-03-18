@@ -20,10 +20,12 @@ import {
   useToast,
   IconButton,
   Tooltip,
+  useColorMode,
 } from '@chakra-ui/react';
 import { CopyIcon } from '@chakra-ui/icons';
 import Prism from 'prismjs';
 import 'prismjs/themes/prism.css';
+import 'prismjs/themes/prism-tomorrow.css';
 
 interface FileNode {
   name: string;
@@ -52,18 +54,34 @@ const CodeViewModal: React.FC<CodeViewModalProps> = ({
   const codeRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
   const [activeTab, setActiveTab] = useState(0);
+  const { colorMode } = useColorMode();
   
   const bg = useColorModeValue('white', 'gray.800');
   const textColor = useColorModeValue('gray.800', 'gray.100');
   const codeBg = useColorModeValue('gray.50', 'gray.700');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
+  const codeTextColor = useColorModeValue('black', 'white');
 
   useEffect(() => {
     if (open) {
-      Prism.highlightAll();
-      console.log("CodeViewModal opened with fileTree:", fileTree); // Debug log
+      const codeElements = document.querySelectorAll('pre code');
+      if (colorMode === 'dark') {
+        codeElements.forEach(el => {
+          el.classList.add('prism-tomorrow');
+        });
+      } else {
+        codeElements.forEach(el => {
+          el.classList.remove('prism-tomorrow');
+        });
+      }
+      
+      setTimeout(() => {
+        Prism.highlightAll();
+      }, 0);
+      
+      console.log("CodeViewModal opened with fileTree:", fileTree); 
     }
-  }, [open, codeContent, fileTree]);
+  }, [open, codeContent, fileTree, colorMode]);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(codeContent)
@@ -88,8 +106,9 @@ const CodeViewModal: React.FC<CodeViewModalProps> = ({
   };
 
   const renderFileTree = (nodes: any, depth = 0) => {
-    // Return early for invalid input
-    if (!nodes) {
+    console.log("Rendering file tree with data:", nodes);
+    
+    if (!nodes || (Array.isArray(nodes) && nodes.length === 0)) {
       return <Text color={textColor}>No file structure available</Text>;
     }
     
@@ -99,15 +118,20 @@ const CodeViewModal: React.FC<CodeViewModalProps> = ({
     if (Array.isArray(nodes)) {
       itemsToRender = nodes;
     } else if (typeof nodes === 'object') {
-      // If it's a single object, wrap it in an array
       if (nodes.name || nodes.path) {
         itemsToRender = [nodes];
+      } else if (nodes.tree && Array.isArray(nodes.tree)) {
+        // Sometimes the tree might be nested under a 'tree' property
+        return renderFileTree(nodes.tree, depth);
+      } else if (nodes.files && Array.isArray(nodes.files)) {
+        // Or under a 'files' property
+        return renderFileTree(nodes.files, depth);
       } else {
         // Try to get values if it's an object map
         itemsToRender = Object.values(nodes);
       }
     } else {
-      return <Text color={textColor}>Invalid file structure format</Text>;
+      return <Text color={textColor}>Invalid file structure format: {typeof nodes}</Text>;
     }
     
     if (itemsToRender.length === 0) {
@@ -116,19 +140,32 @@ const CodeViewModal: React.FC<CodeViewModalProps> = ({
     
     return (
       <Box ml={depth * 4}>
-        {itemsToRender.map((node, index) => (
-          <Box key={index}>
-            <Text 
-              fontWeight={node.type === 'directory' ? 'bold' : 'normal'}
-              color={textColor}
-              my={1}
-            >
-              {node.type === 'directory' ? '📁 ' : '📄 '}
-              {node.name || node.path || 'Unknown'}
-            </Text>
-            {node.children && renderFileTree(node.children, depth + 1)}
-          </Box>
-        ))}
+        {itemsToRender.map((node, index) => {
+          // Handle various node formats
+          const nodeName = node.name || node.path || 
+                          (typeof node === 'string' ? node : 'Unknown');
+          const nodeType = node.type || 
+                          (node.children || node.files ? 'directory' : 'file');
+          
+          // Get children from various possible properties
+          const children = node.children || node.files || 
+                          (node.tree && Array.isArray(node.tree) ? node.tree : null);
+          
+          return (
+            <Box key={index}>
+              <Text 
+                fontWeight={nodeType === 'directory' ? 'bold' : 'normal'}
+                color={textColor}
+                my={1}
+                fontSize="14px"
+              >
+                {nodeType === 'directory' ? '📁 ' : '📄 '}
+                {nodeName}
+              </Text>
+              {children && renderFileTree(children, depth + 1)}
+            </Box>
+          );
+        })}
       </Box>
     );
   };
@@ -169,11 +206,27 @@ const CodeViewModal: React.FC<CodeViewModalProps> = ({
                   h="calc(100% - 40px)"
                   borderWidth="1px"
                   borderColor={borderColor}
-                  color={textColor}
                   className="code-container"
+                  sx={{
+                    '.token': {
+                      color: 'inherit', 
+                    },
+                    'pre': {
+                      color: codeTextColor,
+                      fontFamily: 'monospace',
+                    },
+                    'code': {
+                      color: codeTextColor,
+                      fontFamily: 'monospace',
+                    },
+                    '.language-typescript': {
+                      color: codeTextColor,
+                      fontFamily: 'monospace',
+                    }
+                  }}
                 >
-                  <pre style={{ color: textColor }}>
-                    <code className="language-typescript">
+                  <pre style={{ color: codeTextColor, fontFamily: 'monospace', fontSize: '14px' }}>
+                    <code className={`language-typescript ${colorMode === 'dark' ? 'prism-tomorrow' : ''}`}>
                       {codeContent}
                     </code>
                   </pre>
@@ -189,7 +242,12 @@ const CodeViewModal: React.FC<CodeViewModalProps> = ({
                   borderRadius="md"
                 >
                   {fileTree ? (
-                    renderFileTree(fileTree)
+                    <Box>
+                      <Text mb={4} fontSize="sm" color="gray.500">
+                        Repository file structure:
+                      </Text>
+                      {renderFileTree(fileTree)}
+                    </Box>
                   ) : (
                     <Text color={textColor}>No file structure available</Text>
                   )}

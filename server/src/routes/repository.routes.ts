@@ -1,13 +1,21 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { authenticate } from '../middleware/auth.middleware';
-import { apiLimiter } from '../middleware/rate-limit.middleware';
+import { rateLimit } from 'express-rate-limit';
 import { RepositoryService } from '../services/repository.service';
 import { CacheService } from '../services/cache.service';
 
 const router = Router();
 const repositoryService = new RepositoryService();
 const cacheService = CacheService.getInstance();
+
+// Create apiLimiter middleware
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Validation schemas
 const addRepositorySchema = z.object({
@@ -38,9 +46,9 @@ router.post('/', authenticate, apiLimiter, async (req, res, next) => {
     // Clear user's repository cache
     await cacheService.delete(`user:${req.user!.id}:repos`);
 
-    res.status(201).json(repository);
+    return res.status(201).json(repository);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
@@ -65,9 +73,9 @@ router.get('/', authenticate, apiLimiter, async (req, res, next) => {
     // Cache for 5 minutes
     await cacheService.set(cacheKey, result, 300);
 
-    res.json(result);
+    return res.json(result);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
@@ -78,9 +86,9 @@ router.get('/:id', authenticate, apiLimiter, async (req, res, next) => {
       req.user!.id,
       req.params.id
     );
-    res.json(repository);
+    return res.json(repository);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
@@ -106,9 +114,9 @@ router.get('/:id/content', authenticate, apiLimiter, async (req, res, next) => {
     // Cache for 5 minutes
     await cacheService.set(cacheKey, content, 300);
 
-    res.json(content);
+    return res.json(content);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
@@ -127,9 +135,9 @@ router.post('/:id/sync', authenticate, apiLimiter, async (req, res, next) => {
     ];
     await Promise.all(cacheKeys.map((key) => cacheService.delete(key)));
 
-    res.json(repository);
+    return res.json(repository);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
@@ -145,9 +153,9 @@ router.delete('/:id', authenticate, apiLimiter, async (req, res, next) => {
     ];
     await Promise.all(cacheKeys.map((key) => cacheService.delete(key)));
 
-    res.status(204).send();
+    return res.status(204).send();
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
