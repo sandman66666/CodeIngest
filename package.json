@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "build": "echo 'Using simplified build process'",
+    "build": "node heroku-build.js",
     "heroku-postbuild": "npm install --no-shrinkwrap --no-package-lock"
   },
   "dependencies": {
