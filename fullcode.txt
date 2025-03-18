@@ -1,3 +1,205 @@
+(Files content cropped to 300k characters, download full ingest to see more)
+================================================
+File: README.md
+================================================
+# CodeInsight
+
+CodeInsight is a web application that enhances code understanding by leveraging AI to analyze GitHub repositories. It provides intelligent code analysis, vulnerability scanning, and interactive visualizations.
+
+## Features
+
+- GitHub repository analysis with AI-powered insights
+- Security vulnerability scanning
+- Interactive code visualization dashboard
+- User management with GitHub authentication
+- Shareable analysis reports
+
+## Tech Stack
+
+- Frontend: React + TypeScript
+- Backend: Node.js + TypeScript
+- Database: MongoDB + Redis
+- AI: Claude API
+- Authentication: GitHub OAuth
+
+## Project Structure
+
+```
+codeinsight/
+├── client/      # React frontend
+├── server/      # Node.js backend
+├── common/      # Shared code
+└── docker/      # Docker configuration
+```
+
+## Getting Started
+
+1. Install dependencies:
+```bash
+npm install
+```
+
+2. Set up environment variables:
+```bash
+# Create .env files in client/ and server/ directories
+cp client/.env.example client/.env
+cp server/.env.example server/.env
+```
+
+3. Start development servers:
+```bash
+npm run dev
+```
+
+## Development Guidelines
+
+- Follow TypeScript best practices and maintain strict type safety
+- Write unit tests for all new components
+- Document API endpoints and component interfaces
+- Handle errors gracefully with proper error boundaries
+- Follow security best practices for API keys and authentication
+- Keep components modular and reusable
+
+## Security
+
+- Never commit API keys or secrets
+- Use environment variables for sensitive data
+- Implement proper input validation
+- Follow OAuth security best practices
+- Regular security audits with vulnerability scanning
+
+## Contributing
+
+1. Create a feature branch
+2. Make your changes
+3. Write/update tests
+4. Submit a pull request
+
+## License
+
+MIT
+
+
+
+================================================
+File: app.json
+================================================
+{
+  "name": "CodeIngest",
+  "description": "A tool for code analysis and insights",
+  "repository": "https://github.com/yourusername/CodeIngest",
+  "keywords": ["node", "express", "static"],
+  "env": {
+    "NODE_ENV": {
+      "description": "Environment setting",
+      "value": "production"
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ]
+}
+
+
+
+================================================
+File: Architecture.txt
+================================================
+CodeIngest - Architecture
+
+codeinsight/
+├── .github/ # GitHub workflows and configuration
+│ └── workflows/
+│ ├── ci.yml
+│ └── deploy.yml
+├── client/ # Frontend React application
+│ ├── public/
+│ │ ├── index.html
+│ │ └── assets/
+│ ├── src/
+│ │ ├── components/ # React components
+│ │ │ ├── auth/ # Authentication components
+│ │ │ ├── dashboard/ # Dashboard components
+│ │ │ ├── repository/ # Repository related components
+│ │ │ ├── analysis/ # Analysis result components
+│ │ │ └── common/ # Shared components
+│ │ ├── hooks/ # Custom React hooks
+│ │ ├── services/ # API service modules
+│ │ │ ├── api.ts # Base API configuration
+│ │ │ ├── auth.service.ts # Authentication services
+│ │ │ ├── repo.service.ts # Repository services
+│ │ │ └── analysis.service.ts # Analysis services
+│ │ ├── store/ # State management
+│ │ │ ├── slices/ # Redux slices or context providers
+│ │ │ └── store.ts # Store configuration
+│ │ ├── types/ # TypeScript type definitions
+│ │ ├── utils/ # Utility functions
+│ │ ├── App.tsx # Main App component
+│ │ └── index.tsx # Entry point
+│ ├── .eslintrc.js
+│ ├── tsconfig.json
+│ └── package.json
+├── server/ # Backend Node.js application
+│ ├── src/
+│ │ ├── controllers/ # Request handlers
+│ │ │ ├── auth.controller.ts
+│ │ │ ├── repo.controller.ts
+│ │ │ └── analysis.controller.ts
+│ │ ├── services/ # Business logic
+│ │ │ ├── auth.service.ts
+│ │ │ ├── repo.service.ts
+│ │ │ ├── github.service.ts # GitHub API integration
+│ │ │ ├── claude.service.ts # Claude API integration
+│ │ │ └── analysis.service.ts
+│ │ ├── models/ # Data models
+│ │ │ ├── user.model.ts
+│ │ │ ├── repository.model.ts
+│ │ │ └── analysis.model.ts
+│ │ ├── middleware/ # Express middleware
+│ │ │ ├── auth.middleware.ts
+│ │ │ ├── error.middleware.ts
+│ │ │ └── rate-limit.middleware.ts
+│ │ ├── utils/ # Utility functions
+│ │ │ ├── git.utils.ts # Git operations
+│ │ │ ├── file.utils.ts # File handling
+│ │ │ └── prompt.utils.ts # Claude prompt engineering
+│ │ ├── config/ # Configuration
+│ │ │ ├── env.config.ts
+│ │ │ ├── db.config.ts
+│ │ │ └── api.config.ts
+│ │ ├── routes/ # API routes
+│ │ │ ├── auth.routes.ts
+│ │ │ ├── repo.routes.ts
+│ │ │ └── analysis.routes.ts
+│ │ └── app.ts # Main application setup
+│ ├── .eslintrc.js
+│ ├── tsconfig.json
+│ └── package.json
+├── common/ # Shared code between client and server
+│ ├── src/
+│ │ ├── types/ # Shared type definitions
+│ │ └── constants/ # Shared constants
+│ ├── tsconfig.json
+│ └── package.json
+├── scripts/ # Development and build scripts
+│ ├── setup.sh
+│ └── deploy.sh
+├── docker/ # Docker configuration
+│ ├── Dockerfile.client
+│ ├── Dockerfile.server
+│ └── docker-compose.yml
+├── .gitignore
+├── package.json # Root package.json for workspaces
+├── README.md
+└── tsconfig.json # Base TypeScript configuration
+
+
+
+================================================
+File: fullcode.txt
+================================================
 ================================================
 File: README.md
 ================================================
@@ -9628,3 +9830,1072 @@ export class RepositoryService {
 }
 
 
+
+
+
+================================================
+File: github-oauth-setup.md
+================================================
+# GitHub OAuth Setup Instructions
+
+## 1. Update Server Environment (.env file)
+
+Replace the contents of `/server/.env` with the following, using your GitHub credentials:
+
+```
+# Server Configuration
+PORT=3030
+NODE_ENV=development
+
+# Database Configuration
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/codeinsight
+
+# GitHub OAuth Configuration
+GITHUB_CLIENT_ID=Ov23li8iXRzrnU6OV2Ya
+GITHUB_CLIENT_SECRET=8a90bc07534609020fbe78187d47bf8d486912bd
+GITHUB_CALLBACK_URL=http://localhost:3030/api/auth/github/callback
+
+# Claude AI Configuration
+CLAUDE_API_KEY=your_claude_api_key
+
+# JWT Configuration
+JWT_SECRET=use_a_secure_random_string_at_least_32_chars
+JWT_EXPIRES_IN=7d
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000  # 15 minutes
+RATE_LIMIT_MAX_REQUESTS=100
+```
+
+## 2. Update Client Environment
+
+Update `/client/.env.development` with your GitHub client ID:
+
+```
+# API Configuration
+REACT_APP_API_URL=http://localhost:3030/api
+
+# GitHub OAuth Configuration
+REACT_APP_GITHUB_CLIENT_ID=Ov23li8iXRzrnU6OV2Ya
+```
+
+Make sure to replace `your_claude_api_key` and `use_a_secure_random_string_at_least_32_chars` with the actual values from your Claude AI application and a secure random string respectively.
+
+
+
+================================================
+File: heroku-build.js
+================================================
+const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+console.log('Starting Heroku build process...');
+
+// Build the client (frontend)
+console.log('Building client...');
+try {
+  // First install client dependencies
+  console.log('Installing client dependencies...');
+  execSync('cd client && npm install', { stdio: 'inherit' });
+  
+  // Then build the client
+  console.log('Building client application...');
+  execSync('cd client && npm run build', { stdio: 'inherit' });
+  console.log('Client build completed successfully');
+  
+  // Copy the client build to the root directory for serving
+  const clientDistDir = path.join(__dirname, 'client', 'dist');
+  const publicDir = path.join(__dirname, 'public');
+  
+  // Create public directory if it doesn't exist
+  if (!fs.existsSync(publicDir)) {
+    fs.mkdirSync(publicDir, { recursive: true });
+  }
+  
+  // Copy all files from client/dist to public
+  copyDirectory(clientDistDir, publicDir);
+  console.log('Client build files copied to public directory');
+  
+} catch (error) {
+  console.error('Client build failed:', error);
+  process.exit(1);
+}
+
+console.log('Heroku build completed successfully');
+
+// Helper function to recursively copy a directory
+function copyDirectory(source, destination) {
+  // Create destination directory if it doesn't exist
+  if (!fs.existsSync(destination)) {
+    fs.mkdirSync(destination, { recursive: true });
+  }
+
+  // Get all files and subdirectories in the source directory
+  if (fs.existsSync(source)) {
+    const entries = fs.readdirSync(source, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const sourcePath = path.join(source, entry.name);
+      const destinationPath = path.join(destination, entry.name);
+
+      if (entry.isDirectory()) {
+        // Recursively copy subdirectories
+        copyDirectory(sourcePath, destinationPath);
+      } else {
+        // Copy files
+        fs.copyFileSync(sourcePath, destinationPath);
+      }
+    }
+  } else {
+    console.warn(`Source directory ${source} does not exist`);
+  }
+}
+
+
+
+================================================
+File: index.html
+================================================
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CodeIngest - Code Analysis Platform</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem;
+      line-height: 1.6;
+      color: #333;
+    }
+    header {
+      margin-bottom: 2rem;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 1rem;
+    }
+    h1 {
+      color: #2c3e50;
+    }
+    .card {
+      background: #f9f9f9;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .success {
+      color: #4caf50;
+    }
+    .api-status {
+      margin-top: 2rem;
+    }
+    pre {
+      background: #f1f1f1;
+      padding: 1rem;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+    button {
+      background: #3498db;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    button:hover {
+      background: #2980b9;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>CodeIngest Application</h1>
+    <p>Code analysis and insights platform</p>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2><span class="success">✓</span> Successfully Deployed to Heroku</h2>
+      <p>This is a simplified version of the application serving static content.</p>
+      <p>The API is available at <code>/api</code> endpoints.</p>
+    </div>
+    
+    <div class="card api-status">
+      <h3>API Status</h3>
+      <p>Check the current API status:</p>
+      <button id="checkStatus">Check API Status</button>
+      <div id="apiStatus" style="margin-top: 1rem;">Click the button to check status</div>
+    </div>
+  </main>
+
+  <script>
+    document.getElementById('checkStatus').addEventListener('click', function() {
+      const statusElement = document.getElementById('apiStatus');
+      statusElement.innerHTML = 'Loading...';
+      
+      fetch('/api/health')
+        .then(response => response.json())
+        .then(data => {
+          statusElement.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        })
+        .catch(error => {
+          statusElement.innerHTML = '<p style="color:red">Error connecting to API: ' + error.message + '</p>';
+        });
+    });
+  </script>
+</body>
+</html>
+
+
+
+================================================
+File: package.json
+================================================
+{
+  "name": "codeinsight",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": "18.x",
+    "npm": "9.x"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "build": "node heroku-build.js",
+    "heroku-postbuild": "npm install --no-shrinkwrap --no-package-lock"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "body-parser": "^1.20.2",
+    "dotenv": "^16.3.1",
+    "path": "^0.12.7",
+    "axios": "^1.4.0",
+    "uuid": "^9.0.0",
+    "jsonwebtoken": "^9.0.0",
+    "glob": "^10.0.0",
+    "fs-extra": "^11.1.1",
+    "child_process": "^1.0.2",
+    "util": "^0.12.5",
+    "os": "^0.1.2"
+  }
+}
+
+
+
+================================================
+File: Procfile
+================================================
+web: node server.js
+
+
+
+================================================
+File: reverence.txt
+================================================
+
+Entrypoint
+
+async def ingest_async(
+    source: str,
+    max_file_size: int = 10 * 1024 * 1024,  # 10 MB
+    include_patterns: Optional[Union[str, Set[str]]] = None,
+    exclude_patterns: Optional[Union[str, Set[str]]] = None,
+    branch: Optional[str] = None,
+    output: Optional[str] = None,
+) -> Tuple[str, str, str]:
+    """
+    Main entry point for ingesting a source and processing its contents.
+    """
+    repo_cloned = False
+
+    try:
+        query: IngestionQuery = await parse_query(
+            source=source,
+            max_file_size=max_file_size,
+            from_web=False,
+            include_patterns=include_patterns,
+            ignore_patterns=exclude_patterns,
+        )
+
+        if query.url:
+            selected_branch = branch if branch else query.branch  # prioritize branch argument
+            query.branch = selected_branch
+
+            clone_config = query.extract_clone_config()
+            clone_coroutine = clone(clone_config)
+
+            if inspect.iscoroutine(clone_coroutine):
+                if asyncio.get_event_loop().is_running():
+                    await clone_coroutine
+                else:
+                    asyncio.run(clone_coroutine)
+            else:
+                raise TypeError("clone did not return a coroutine as expected.")
+
+            repo_cloned = True
+
+        summary, tree, content = ingest_query(query)
+
+        if output is not None:
+            with open(output, "w", encoding="utf-8") as f:
+                f.write(tree + "\n" + content)
+
+        return summary, tree, content
+    finally:
+        # Clean up the temporary directory if it was created
+        if repo_cloned:
+            shutil.rmtree(TMP_BASE_PATH, ignore_errors=True)
+
+            =====================================================
+            =====================================================
+
+
+    Ingestion 
+
+    def ingest_query(query: IngestionQuery) -> Tuple[str, str, str]:
+    """
+    Run the ingestion process for a parsed query.
+    """
+    subpath = Path(query.subpath.strip("/")).as_posix()
+    path = query.local_path / subpath
+
+    apply_gitingest_file(path, query)
+
+    if not path.exists():
+        raise ValueError(f"{query.slug} cannot be found")
+
+    if (query.type and query.type == "blob") or query.local_path.is_file():
+        # Handle single file case
+        if not path.is_file():
+            raise ValueError(f"Path {path} is not a file")
+
+        relative_path = path.relative_to(query.local_path)
+
+        file_node = FileSystemNode(
+            name=path.name,
+            type=FileSystemNodeType.FILE,
+            size=path.stat().st_size,
+            file_count=1,
+            path_str=str(relative_path),
+            path=path,
+        )
+
+        if not file_node.content:
+            raise ValueError(f"File {file_node.name} has no content")
+
+        return format_node(file_node, query)
+
+    # Handle directory case
+    root_node = FileSystemNode(
+        name=path.name,
+        type=FileSystemNodeType.DIRECTORY,
+        path_str=str(path.relative_to(query.local_path)),
+        path=path,
+    )
+
+    stats = FileSystemStats()
+
+    _process_node(
+        node=root_node,
+        query=query,
+        stats=stats,
+    )
+
+    return format_node(root_node, query)
+
+    ===============================================================
+    ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+    cloning 
+
+    @async_timeout(TIMEOUT)
+async def clone(config: CloneConfig) -> None:
+    """
+    Clone a repository to a local path based on the provided configuration.
+    """
+    # Extract and validate query parameters
+    url: str = config.url
+    local_path: str = config.local_path
+    commit: Optional[str] = config.commit
+    branch: Optional[str] = config.branch
+    partial_clone: bool = config.subpath != "/"
+
+    # Create parent directory if it doesn't exist
+    parent_dir = Path(local_path).parent
+    try:
+        os.makedirs(parent_dir, exist_ok=True)
+    except OSError as exc:
+        raise OSError(f"Failed to create parent directory {parent_dir}: {exc}") from exc
+
+    # Check if the repository exists
+    if not await _check_repo_exists(url):
+        raise ValueError("Repository not found, make sure it is public")
+
+    clone_cmd = ["git", "clone", "--single-branch"]
+    # TODO re-enable --recurse-submodules
+
+    if partial_clone:
+        clone_cmd += ["--filter=blob:none", "--sparse"]
+
+    if not commit:
+        clone_cmd += ["--depth=1"]
+        if branch and branch.lower() not in ("main", "master"):
+            clone_cmd += ["--branch", branch]
+
+    clone_cmd += [url, local_path]
+
+    # Clone the repository
+    await _run_command(*clone_cmd)
+
+    if commit or partial_clone:
+        checkout_cmd = ["git", "-C", local_path]
+
+        if partial_clone:
+            subpath = config.subpath.lstrip("/")
+            if config.blob:
+                # When ingesting from a file url (blob/branch/path/file.txt), we need to remove the file name.
+                subpath = str(Path(subpath).parent.as_posix())
+
+            checkout_cmd += ["sparse-checkout", "set", subpath]
+
+        if commit:
+            checkout_cmd += ["checkout", commit]
+
+        # Check out the specific commit and/or subpath
+        await _run_command(*checkout_cmd)
+
+
+        ====================================================================
+        ====================================================================
+
+        logic for inclusion or not in ingestion 
+
+        def _should_include(path: Path, base_path: Path, include_patterns: Set[str]) -> bool:
+    """
+    Determine if the given file or directory path matches any of the include patterns.
+    """
+    try:
+        rel_path = path.relative_to(base_path)
+    except ValueError:
+        # If path is not under base_path at all
+        return False
+
+    rel_str = str(rel_path)
+    if path.is_dir():
+        rel_str += "/"
+
+    for pattern in include_patterns:
+        if fnmatch(rel_str, pattern):
+            return True
+    return False
+
+
+def _should_exclude(path: Path, base_path: Path, ignore_patterns: Set[str]) -> bool:
+    """
+    Determine if the given file or directory path matches any of the ignore patterns.
+    """
+    try:
+        rel_path = path.relative_to(base_path)
+    except ValueError:
+        # If path is not under base_path at all
+        return True
+
+    rel_str = str(rel_path)
+    for pattern in ignore_patterns:
+        if pattern and fnmatch(rel_str, pattern):
+            return True
+    return False
+
+    ===================================
+    ===================================
+
+    Processing node of files 
+
+    def _process_node(
+    node: FileSystemNode,
+    query: IngestionQuery,
+    stats: FileSystemStats,
+) -> None:
+    """
+    Process a file or directory item within a directory.
+    """
+    if limit_exceeded(stats, node.depth):
+        return
+
+    for sub_path in node.path.iterdir():
+        symlink_path = None
+        if sub_path.is_symlink():
+            if not _is_safe_symlink(sub_path, query.local_path):
+                print(f"Skipping unsafe symlink: {sub_path}")
+                continue
+
+            symlink_path = sub_path
+            sub_path = sub_path.resolve()
+
+        if sub_path in stats.visited:
+            print(f"Skipping already visited path: {sub_path}")
+            continue
+
+        stats.visited.add(sub_path)
+
+        if query.ignore_patterns and _should_exclude(sub_path, query.local_path, query.ignore_patterns):
+            continue
+
+        if query.include_patterns and not _should_include(sub_path, query.local_path, query.include_patterns):
+            continue
+
+        if sub_path.is_file():
+            _process_file(path=sub_path, parent_node=node, stats=stats, local_path=query.local_path)
+        elif sub_path.is_dir():
+            child_directory_node = FileSystemNode(
+                name=sub_path.name,
+                type=FileSystemNodeType.DIRECTORY,
+                path_str=str(sub_path.relative_to(query.local_path)),
+                path=sub_path,
+                depth=node.depth + 1,
+            )
+
+            # rename the subdir to reflect the symlink name
+            if symlink_path:
+                child_directory_node.name = symlink_path.name
+                child_directory_node.path_str = str(symlink_path)
+
+            _process_node(
+                node=child_directory_node,
+                query=query,
+                stats=stats,
+            )
+            node.children.append(child_directory_node)
+            node.size += child_directory_node.size
+            node.file_count += child_directory_node.file_count
+            node.dir_count += 1 + child_directory_node.dir_count
+
+        else:
+            raise ValueError(f"Unexpected error: {sub_path} is neither a file nor a directory")
+
+    node.sort_children()
+
+    Understanding the App Size
+You're absolutely right that the core ingestion logic is not overly complex. The reason the original app is large is because it handles several aspects beyond just ingestion:
+
+Multiple interfaces: CLI, Python module, and web application
+Error handling and edge cases: Dealing with various repository hosts, file types, encodings
+Server components: Web routing, templating, API endpoints
+Caching and optimization: For handling large repositories efficiently
+Output formatting: For making the content LLM-friendly
+
+For your TypeScript/React version, you could simplify this considerably by focusing on:
+
+GitHub authentication
+Repository cloning (using a Git library for Node.js)
+File traversal and filtering (similar to the Python code above)
+Claude API integration for the analysis
+
+The core logic can be translated to TypeScript, and many of the web application concerns can be handled by React and modern web frameworks.
+Would you like me to focus on implementing just this core ingestion logic in TypeScript? That would be a more manageable first step.
+
+
+================================================
+File: server.js
+================================================
+// Express server for Heroku deployment
+const express = require('express');
+const path = require('path');
+const cors = require('cors');
+const { v4: uuidv4 } = require('uuid');
+const axios = require('axios');
+const app = express();
+const InMemoryStore = require('./services/in-memory-store');
+const { ingestRepository } = require('./services/code-ingestion');
+
+// Configuration
+const PORT = process.env.PORT || 3000;
+const store = InMemoryStore.getInstance();
+
+// Middleware
+app.use(express.json());
+app.use(cors());
+
+// Serve static files from the public directory (client build)
+app.use(express.static(path.join(__dirname, 'public')));
+
+// API endpoints
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok',
+    environment: process.env.NODE_ENV || 'development',
+    timestamp: new Date().toISOString(),
+    message: 'CodeIngest API is running'
+  });
+});
+
+// Get all repositories
+app.get('/api/repositories', (req, res) => {
+  const userId = store.getUsers()[0].id; // Using default user
+  const repositories = store.getRepositories(userId);
+  res.json({ repositories });
+});
+
+// Get a repository by id
+app.get('/api/repositories/:id', (req, res) => {
+  const repoId = req.params.id;
+  const repository = store.getRepositoryById(repoId);
+  
+  if (!repository) {
+    return res.status(404).json({ error: 'Repository not found' });
+  }
+  
+  res.json({ repository });
+});
+
+// Add a new repository with owner/name
+app.post('/api/repositories', (req, res) => {
+  const { owner, name, url } = req.body;
+  
+  if (!owner || !name) {
+    return res.status(400).json({ error: 'Owner and name are required' });
+  }
+  
+  const userId = store.getUsers()[0].id;
+  
+  // Check if repository already exists
+  const existingRepo = store.getRepositoryByOwnerAndName(userId, owner, name);
+  
+  if (existingRepo) {
+    return res.status(409).json({ error: 'Repository already exists' });
+  }
+  
+  // Create new repository
+  const newRepo = {
+    id: `repo-${uuidv4()}`,
+    userId,
+    owner,
+    name,
+    description: `${name} repository`,
+    url: url || `https://github.com/${owner}/${name}`,
+    language: 'JavaScript',
+    stargazersCount: Math.floor(Math.random() * 1000),
+    forksCount: Math.floor(Math.random() * 200),
+    createdAt: new Date(),
+    updatedAt: new Date()
+  };
+  
+  const repository = store.createRepository(newRepo);
+  return res.status(201).json({ repository });
+});
+
+// Ingest a public GitHub repository
+app.post('/api/public-repositories', async (req, res) => {
+  const { url } = req.body;
+  
+  if (!url) {
+    return res.status(400).json({ error: 'GitHub repository URL is required' });
+  }
+  
+  // Parse owner and name from GitHub URL
+  let repoOwner, repoName;
+  
+  try {
+    const githubUrlPattern = /github\.com\/([^\/]+)\/([^\/]+)/;
+    const match = url.match(githubUrlPattern);
+    
+    if (!match) {
+      return res.status(400).json({ error: 'Invalid GitHub URL format. Expected format: https://github.com/owner/repository' });
+    }
+    
+    repoOwner = match[1];
+    repoName = match[2].replace('.git', ''); // Remove .git if present
+  } catch (error) {
+    return res.status(400).json({ error: 'Could not parse GitHub URL' });
+  }
+  
+  if (!repoOwner || !repoName) {
+    return res.status(400).json({ error: 'Could not extract repository owner and name from URL' });
+  }
+  
+  try {
+    // Check if the repository exists on GitHub
+    let githubResponse;
+    try {
+      githubResponse = await axios.get(`https://api.github.com/repos/${repoOwner}/${repoName}`);
+    } catch (error) {
+      if (error.response?.status === 404) {
+        return res.status(404).json({ error: 'Repository not found on GitHub' });
+      } else if (error.response?.status === 403) {
+        return res.status(403).json({ error: 'This repository appears to be private. Please log in with GitHub to access private repositories.' });
+      } else {
+        throw error;
+      }
+    }
+    
+    const repoData = githubResponse.data;
+    
+    // Check if the repository is private
+    if (repoData.private) {
+      return res.status(403).json({ error: 'This is a private repository. Please log in with GitHub to access private repositories.' });
+    }
+    
+    // Use our demo user ID for simplicity
+    const userId = store.getUsers()[0].id;
+    
+    // Check if repository already exists in our system
+    const existingRepo = store.getRepositoryByOwnerAndName(userId, repoOwner, repoName);
+    
+    if (existingRepo) {
+      // If it exists but doesn't have ingested content, we could update it
+      if (!existingRepo.ingestedContent) {
+        console.log(`Adding content for existing repository: ${repoOwner}/${repoName}`);
+        
+        // Perform code ingestion
+        const ingestionResult = await ingestRepository(url);
+        
+        // Update the repository with ingested content
+        existingRepo.ingestedContent = {
+          summary: ingestionResult.summary,
+          tree: ingestionResult.tree,
+          fullCode: ingestionResult.content,
+          fileCount: ingestionResult.fileCount,
+          sizeInBytes: ingestionResult.totalSizeBytes
+        };
+        
+        store.updateRepository(existingRepo.id, existingRepo);
+      }
+      
+      return res.status(200).json({ repository: existingRepo, message: 'Repository already exists' });
+    }
+    
+    // Perform code ingestion process
+    console.log(`Starting ingestion process for ${repoOwner}/${repoName}`);
+    const ingestionResult = await ingestRepository(url);
+    console.log(`Completed ingestion for ${repoOwner}/${repoName} with ${ingestionResult.fileCount} files`);
+    
+    // Create new repository with data from GitHub API
+    const newRepo = {
+      id: `repo-${uuidv4()}`,
+      userId,
+      owner: repoOwner,
+      name: repoName,
+      description: repoData.description || null,
+      url: repoData.html_url,
+      language: repoData.language || null,
+      stargazersCount: repoData.stargazers_count,
+      forksCount: repoData.forks_count,
+      ingestedContent: {
+        summary: ingestionResult.summary,
+        tree: ingestionResult.tree,
+        fullCode: ingestionResult.content,
+        fileCount: ingestionResult.fileCount,
+        sizeInBytes: ingestionResult.totalSizeBytes
+      },
+      createdAt: new Date()
+    };
+    
+    const repository = store.createRepository(newRepo);
+    
+    // Create a new analysis record for this repository
+    const analysisId = uuidv4();
+    const analysis = {
+      id: analysisId,
+      repositoryId: repository.id,
+      status: 'pending',
+      createdAt: new Date(),
+      completedAt: null,
+      results: null
+    };
+
+    store.createAnalysis(analysis);
+    
+    // Simulate analysis completion after 5 seconds
+    setTimeout(() => {
+      const updatedAnalysis = {
+        status: 'completed',
+        completedAt: new Date(),
+        results: [
+          {
+            id: uuidv4(),
+            title: 'Good code organization',
+            description: `The ${repository.name} codebase has a clear structure with separate concerns.`,
+            severity: 'low',
+            category: 'best_practice'
+          },
+          {
+            id: uuidv4(),
+            title: 'Consider refactoring some components',
+            description: 'Several components could benefit from being broken down into smaller, more focused components.',
+            severity: 'medium',
+            category: 'refactoring'
+          }
+        ]
+      };
+      
+      store.updateAnalysis(analysisId, updatedAnalysis);
+      console.log(`Analysis completed for repository: ${repository.name}`);
+    }, 5000);
+    
+    return res.status(201).json({ repository });
+    
+  } catch (error) {
+    console.error('Error during repository ingestion:', error);
+    return res.status(500).json({ error: 'An error occurred during repository ingestion' });
+  }
+});
+
+// Get analyses for a repository
+app.get('/api/repositories/:repositoryId/analyses', (req, res) => {
+  const { repositoryId } = req.params;
+  const repository = store.getRepositoryById(repositoryId);
+  
+  if (!repository) {
+    return res.status(404).json({ error: 'Repository not found' });
+  }
+  
+  const analyses = store.getAnalysesByRepositoryId(repositoryId);
+  res.json({ analyses });
+});
+
+// Catch-all route for client-side routing
+app.get('*', (req, res) => {
+  if (req.url.startsWith('/api')) {
+    return res.status(404).json({ error: 'API endpoint not found' });
+  }
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Start the server
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+});
+
+
+
+================================================
+File: setup-env.sh
+================================================
+#!/bin/bash
+
+# Create server .env file with placeholder values
+cat > ./server/.env << EOL
+# Server Configuration
+PORT=3000
+NODE_ENV=development
+
+# Database Configuration
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/codeinsight
+REDIS_URL=redis://localhost:6379
+
+# GitHub OAuth Configuration
+GITHUB_CLIENT_ID=placeholder_github_id
+GITHUB_CLIENT_SECRET=placeholder_github_secret
+GITHUB_CALLBACK_URL=http://localhost:3000/api/auth/github/callback
+
+# Claude AI Configuration
+ANTHROPIC_API_KEY=placeholder_anthropic_key
+CLAUDE_API_KEY=placeholder_claude_key
+
+# JWT Configuration
+JWT_SECRET=temporary_dev_jwt_secret_at_least_32_chars_long
+JWT_EXPIRES_IN=7d
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+EOL
+
+# Create client .env file
+cat > ./client/.env.development << EOL
+# API Configuration
+REACT_APP_API_URL=http://localhost:3000/api
+
+# GitHub OAuth Configuration
+REACT_APP_GITHUB_CLIENT_ID=placeholder_github_id
+EOL
+
+echo "Environment files created with placeholder values"
+echo "Please update with your actual credentials before running in production"
+
+
+
+================================================
+File: Spec.txt
+================================================
+CodeIngest - Spec
+
+Specification for Your Enhanced Version
+
+Product Name: CodeInsight
+
+Product Overview
+
+CodeInsight is a web application that enhances code understanding by leveraging AI to analyze GitHub repositories. Users authenticate with GitHub to access both public and private repositories, then CodeInsight processes the codebase through Claude AI to produce insights, vulnerability reports, and product specifications.
+
+Core Features
+
+1. GitHub Authentication
+     - OAuth integration with GitHub
+    - Access to private and public repositories
+    - User profile and repository management
+
+1. Repository Ingestion
+     - Clone and analyze GitHub repositories
+    - Smart filtering of files (by patterns, size, and type)
+    - Efficient handling of large codebases
+
+1. AI Analysis with Claude
+     - Code review with best practices assessment
+    - Security vulnerability scanning
+    - Identification of key files and components
+    - Generation of product specifications
+
+1. Visualization
+     - Interactive file tree navigator
+    - Code structure visualization
+    - Key insights dashboard
+    - Exportable reports in multiple formats
+
+1. User Management
+     - Save analysis history
+    - Favorite repositories
+    - Share analysis results
+
+User Flow
+
+6. User logs in with GitHub credentials
+7. User selects a repository to analyze
+8. System clones and processes the repository
+9. Claude AI analyzes the codebase
+10. System presents results in an interactive dashboard
+11. User can explore detailed reports, share results, or export specifications
+
+Technical Requirements
+
+12. Frontend
+     - React with TypeScript
+    - Modern UI library (e.g., Material UI or Chakra UI)
+    - Responsive design for mobile and desktop
+
+1. Backend
+     - Node.js with TypeScript
+    - Express or NestJS framework
+    - RESTful API architecture
+
+1. Authentication
+     - GitHub OAuth integration
+    - JWT token-based authentication
+    - Secure credential handling
+
+1. AI Integration
+     - Anthropic Claude API integration
+    - Efficient content chunking for large repositories
+    - Prompt engineering for code analysis
+
+1. Data Storage
+     - MongoDB for user data and analysis results
+    - Redis for caching and rate-limiting
+    - Temporary file storage for repository processing
+
+1. Deployment
+     - Docker containerization
+    - Cloud hosting (AWS, GCP, or Azure)
+    - CI/CD pipeline
+
+
+
+================================================
+File: tsconfig.json
+================================================
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "exclude": ["node_modules"]
+}
+
+
+
+================================================
+File: .npmrc
+================================================
+legacy-peer-deps=true
+node-linker=hoisted
+public-hoist-pattern[]=*
+install-strategy=shallow
+prefer-install=npm
+
+
+
+================================================
+File: client/index.html
+================================================
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src 'self' localhost:* ws:; font-src 'self' data: https: http:; img-src 'self' data: https: http:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+    />
+    <meta
+      name="description"
+      content="CodeInsight - AI-powered code analysis and understanding"
+    />
+    <link rel="apple-touch-icon" href="/logo192.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>CodeInsight</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/index.tsx"></script>
+  </body>
+</html>
+
+
+
+================================================
+File: client/jest.config.js
+================================================
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'jsdom',
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/src/$1',
+  },
+  setupFilesAfterEnv: ['<rootDir>/src/setupTests.ts'],
+  testMatch: ['**/__tests__/**/*.test.ts?(x)', '**/?(*.)+(spec|test).ts?(x)'],
+  transform: {
+    '^.+\\.tsx?$': 'ts-jest',
+  },
+  globals: {
+    'ts-jest': {
+      tsconfig: 'tsconfig.json',
+    },
+  },
+};
+
+
+
+========================

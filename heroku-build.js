@@ -16,7 +16,7 @@ try {
   execSync('cd client && npm run build', { stdio: 'inherit' });
   console.log('Client build completed successfully');
   
-  // Copy the client build to the root directory for serving
+  // Copy the client build to the public directory for serving
   const clientDistDir = path.join(__dirname, 'client', 'dist');
   const publicDir = path.join(__dirname, 'public');
   
@@ -31,6 +31,23 @@ try {
   
 } catch (error) {
   console.error('Client build failed:', error);
+  process.exit(1);
+}
+
+// Build the server (backend)
+console.log('Building server...');
+try {
+  // First install server dependencies
+  console.log('Installing server dependencies...');
+  execSync('cd server && npm install', { stdio: 'inherit' });
+  
+  // Then build the server using the simplified configuration
+  console.log('Building server application with simplified configuration...');
+  execSync('cd server && npm run build-simple', { stdio: 'inherit' });
+  console.log('Server build completed successfully');
+  
+} catch (error) {
+  console.error('Server build failed:', error);
   process.exit(1);
 }
 

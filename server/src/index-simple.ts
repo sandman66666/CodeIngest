@@ -41,10 +41,17 @@ app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
 // Serve static files from the client build directory
 if (process.env.NODE_ENV === 'production') {
   const path = require('path');
-  const clientBuildPath = path.join(__dirname, '../../client/dist');
   
-  console.log(`Serving static files from: ${clientBuildPath}`);
-  app.use(express.static(clientBuildPath));
+  // Path to the public directory in production
+  const publicPath = path.join(__dirname, '../../../public');
+  
+  console.log(`Serving static files from: ${publicPath}`);
+  app.use(express.static(publicPath));
+  
+  // For direct URL navigation in SPA (Single Page Application)
+  app.get('*', (_, res) => {
+    res.sendFile(path.join(publicPath, 'index.html'));
+  });
 }
 
 // Middleware
@@ -56,12 +63,12 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
 // Basic health check endpoint
-app.get('/api/health', (_req: Request, res: Response) => {
+app.get('/api/health', (_, res: Response) => {
   return res.json({ status: 'healthy', message: 'Server is running in simplified mode with in-memory storage' });
 });
 
 // GitHub OAuth routes
-app.get('/api/auth/github', (_req: Request, res: Response) => {
+app.get('/api/auth/github', (_, res: Response) => {
   const clientId = process.env.GITHUB_CLIENT_ID;
   const redirectUri = process.env.GITHUB_CALLBACK_URL;
   const scope = 'repo read:user user:email';
@@ -192,7 +199,7 @@ app.get('/api/auth/me', (req: Request, res: Response) => {
 });
 
 // Repository endpoints
-app.get('/api/repositories', (_req: Request, res: Response) => {
+app.get('/api/repositories', (_, res: Response) => {
   // In a real app, we'd get the user ID from the authenticated request
   const userId = store.getUsers()[0].id;
   const repositories = store.getRepositories(userId);
@@ -430,15 +437,15 @@ export default App;`;
 });
 
 // Analysis endpoints
-app.get('/api/repositories/:repositoryId/analyses', (req: Request, res: Response) => {
-  const { repositoryId } = req.params;
+app.get('/api/repositories/:repositoryId/analyses', (_, res: Response) => {
+  const { repositoryId } = _.params;
   const analyses = store.getAnalyses(repositoryId);
   
   return res.json({ analyses });
 });
 
-app.get('/api/analyses/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
+app.get('/api/analyses/:id', (_, res: Response) => {
+  const { id } = _.params;
   const analysis = store.getAnalysisById(id);
   
   if (!analysis) {
@@ -448,8 +455,8 @@ app.get('/api/analyses/:id', (req: Request, res: Response) => {
   return res.json({ analysis });
 });
 
-app.get('/api/analysis/:analysisId', async (req: Request, res: Response) => {
-  const { analysisId } = req.params;
+app.get('/api/analysis/:analysisId', async (_, res: Response) => {
+  const { analysisId } = _.params;
   const analysis = store.getAnalysisById(analysisId);
 
   if (!analysis) {
@@ -465,8 +472,8 @@ app.get('/api/analysis/:analysisId', async (req: Request, res: Response) => {
   });
 });
 
-app.post('/api/repositories/:repositoryId/analyses', (req: Request, res: Response) => {
-  const { repositoryId } = req.params;
+app.post('/api/repositories/:repositoryId/analyses', (_, res: Response) => {
+  const { repositoryId } = _.params;
   const repository = store.getRepositoryById(repositoryId);
   
   if (!repository) {
@@ -519,9 +526,9 @@ app.post('/api/repositories/:repositoryId/analyses', (req: Request, res: Respons
   return;
 });
 
-app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
-  const { repositoryId } = req.params;
-  const { apiKey } = req.body;
+app.post('/api/analysis/:repositoryId', async (_, res: Response) => {
+  const { repositoryId } = _.params;
+  const { apiKey } = _.body;
   
   // Validate repository exists
   const repository = store.getRepositoryById(repositoryId);
@@ -622,8 +629,8 @@ app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
 });
 
 // Mock analysis endpoint (for development only)
-app.post('/api/analysis/mock/:repositoryId', (req: Request, res: Response) => {
-  const { repositoryId } = req.params;
+app.post('/api/analysis/mock/:repositoryId', (_, res: Response) => {
+  const { repositoryId } = _.params;
   
   // Create a new analysis with pending status
   const newAnalysis: Analysis = {
@@ -681,16 +688,5 @@ app.listen(port, () => {
     console.log(`Health check available at http://localhost:${port}/api/health`);
   }
 });
-
-// Add catch-all route to serve index.html for client-side routing
-if (process.env.NODE_ENV === 'production') {
-  const path = require('path');
-  app.get('*', (req, res) => {
-    if (req.url.startsWith('/api')) {
-      return res.status(404).send('API endpoint not found');
-    }
-    res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
-  });
-}
 
 export default app;

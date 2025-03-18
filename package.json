@@ -7,9 +7,9 @@
     "npm": "9.x"
   },
   "scripts": {
-    "start": "node server.js",
-    "build": "node heroku-build.js",
-    "heroku-postbuild": "npm install --no-shrinkwrap --no-package-lock"
+    "start": "node server/dist/index-simple.js",
+    "build": "node heroku-build.js && cd server && npm run build-simple",
+    "heroku-postbuild": "npm install --no-shrinkwrap --no-package-lock && cd server && npm install --no-shrinkwrap --no-package-lock"
   },
   "dependencies": {
     "express": "^4.18.2",
