@@ -63,7 +63,7 @@ export function PublicRepositoryIngest() {
     setError(null);
 
     try {
-      const response = await axios.post('http://localhost:3030/api/public-repositories', {
+      const response = await axios.post('/api/public-repositories', {
         url: repoUrl
       });
 
@@ -121,7 +121,7 @@ export function PublicRepositoryIngest() {
       
       // Use OpenAI API key from environment variable in production
       // For development, the key should be configured on the server-side
-      const response = await axios.post(`http://localhost:3030/api/analysis/${ingestionResult.repository.id}`, {
+      const response = await axios.post(`/api/analysis/${ingestionResult.repository.id}`, {
         apiKey: '' // Empty string will make the server use its environment variable
       });
       
