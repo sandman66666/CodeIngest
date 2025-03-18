@@ -5,9 +5,50 @@ const cors = require('cors');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
+const fs = require('fs');
+
+// Logging setup
+function log(message, level = 'info') {
+  const timestamp = new Date().toISOString();
+  const logMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+  console.log(logMessage);
+  
+  // Also log to a file for troubleshooting
+  try {
+    const logDir = path.join(__dirname, 'logs');
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    fs.appendFileSync(path.join(logDir, 'server.log'), logMessage + '\n');
+  } catch (err) {
+    console.error('Failed to write to log file:', err);
+  }
+}
+
+// Log startup information
+log('Starting server...');
+log(`Node environment: ${process.env.NODE_ENV || 'development'}`);
+log(`Current directory: ${__dirname}`);
+try {
+  log(`Directory contents: ${fs.readdirSync(__dirname).join(', ')}`);
+} catch (err) {
+  log(`Error reading directory: ${err.message}`, 'error');
+}
+
+// Log environment variables (excluding sensitive ones)
+log('Environment variables:');
+const safeEnvVars = Object.keys(process.env)
+  .filter(key => !key.includes('KEY') && !key.includes('SECRET') && !key.includes('TOKEN') && !key.includes('PASSWORD'))
+  .reduce((obj, key) => {
+    obj[key] = process.env[key];
+    return obj;
+  }, {});
+log(JSON.stringify(safeEnvVars, null, 2));
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+log(`Initializing server on port ${port}`);
 
 // GitHub API helper functions
 const githubApi = {
@@ -153,24 +194,70 @@ app.use(cors({
   credentials: true
 }));
 
+// Log all requests
+app.use((req, res, next) => {
+  log(`${req.method} ${req.originalUrl}`);
+  next();
+});
+
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
   const publicPath = path.join(__dirname, 'public');
   
-  console.log(`Serving static files from: ${publicPath}`);
+  log(`Production mode: Serving static files from: ${publicPath}`);
+  // Check if directory exists
+  try {
+    if (fs.existsSync(publicPath)) {
+      log(`Public directory exists with contents: ${fs.readdirSync(publicPath).join(', ')}`);
+    } else {
+      log(`Warning: Public directory does not exist at ${publicPath}`, 'warn');
+      // Try to create it
+      fs.mkdirSync(publicPath, { recursive: true });
+      log(`Created public directory at ${publicPath}`);
+    }
+  } catch (err) {
+    log(`Error checking public directory: ${err.message}`, 'error');
+  }
+  
   app.use(express.static(publicPath));
   
   // For direct URL navigation in SPA
-  app.get('*', (_, res) => {
+  app.get('*', (req, res) => {
     // Only serve index.html for paths that don't start with /api
-    if (!_.path.startsWith('/api')) {
-      res.sendFile(path.join(publicPath, 'index.html'));
+    if (!req.path.startsWith('/api')) {
+      const indexPath = path.join(publicPath, 'index.html');
+      log(`Serving index.html for path: ${req.path}`);
+      
+      // Check if index.html exists
+      try {
+        if (fs.existsSync(indexPath)) {
+          res.sendFile(indexPath);
+        } else {
+          log(`Error: index.html not found at ${indexPath}`, 'error');
+          res.status(404).send('index.html not found');
+        }
+      } catch (err) {
+        log(`Error serving index.html: ${err.message}`, 'error');
+        res.status(500).send(`Server error: ${err.message}`);
+      }
     }
   });
 } else {
   // In development, serve static files from the client's dist directory
   const clientDistPath = path.join(__dirname, 'client', 'dist');
-  console.log(`Development: Serving static files from: ${clientDistPath}`);
+  log(`Development mode: Serving static files from: ${clientDistPath}`);
+  
+  // Check if directory exists
+  try {
+    if (fs.existsSync(clientDistPath)) {
+      log(`Client dist directory exists with contents: ${fs.readdirSync(clientDistPath).join(', ')}`);
+    } else {
+      log(`Warning: Client dist directory does not exist at ${clientDistPath}`, 'warn');
+    }
+  } catch (err) {
+    log(`Error checking client dist directory: ${err.message}`, 'error');
+  }
+  
   app.use(express.static(clientDistPath));
 }
 
@@ -338,7 +425,7 @@ app.get('/api/repositories/:id', (req, res) => {
 
 // Start the server
 app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`GitHub OAuth: ${process.env.GITHUB_CLIENT_ID ? 'Configured' : 'Not configured'}`);
+  log(`Server running on port ${port}`);
+  log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  log(`GitHub OAuth: ${process.env.GITHUB_CLIENT_ID ? 'Configured' : 'Not configured'}`);
 });
