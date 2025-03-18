@@ -271,6 +271,76 @@ app.get('/api/health', (_, res) => {
   });
 });
 
+// Public repositories endpoint
+app.post('/api/public-repositories', async (req, res) => {
+  try {
+    log(`POST request to /api/public-repositories with body: ${JSON.stringify(req.body)}`);
+    const { url } = req.body;
+    
+    if (!url) {
+      log('Missing URL in request body', 'error');
+      return res.status(400).json({ error: 'Repository URL is required' });
+    }
+    
+    // Parse GitHub URL
+    const githubUrlRegex = /github\.com\/([^/]+)\/([^/]+)/;
+    const match = url.match(githubUrlRegex);
+    
+    if (!match) {
+      log(`Invalid GitHub URL: ${url}`, 'error');
+      return res.status(400).json({ error: 'Invalid GitHub repository URL' });
+    }
+    
+    const [, repoOwner, repoName] = match;
+    const normalizedRepoName = repoName.replace('.git', '');
+    
+    log(`Parsed GitHub URL - Owner: ${repoOwner}, Repo: ${normalizedRepoName}`);
+    
+    try {
+      // Fetch repository details and tree
+      log(`Fetching repository details for ${repoOwner}/${normalizedRepoName}`);
+      const repoDetails = await githubApi.getRepoDetails(repoOwner, normalizedRepoName);
+      const branch = repoDetails.default_branch || 'main';
+      
+      log(`Fetching repository tree for ${repoOwner}/${normalizedRepoName} on branch ${branch}`);
+      const repoTree = await githubApi.getRepoTree(repoOwner, normalizedRepoName, branch);
+      
+      // Create response object
+      const repository = {
+        id: uuidv4(),
+        url,
+        owner: repoOwner,
+        repo: normalizedRepoName,
+        name: repoDetails.name,
+        fullName: repoDetails.full_name,
+        description: repoDetails.description || '',
+        defaultBranch: branch,
+        createdAt: new Date().toISOString(),
+        fileCount: repoTree.tree.filter(item => item.type === 'blob').length,
+        size: repoDetails.size,
+        status: 'completed',
+        tree: repoTree.tree
+      };
+      
+      log(`Successfully created repository object: ${repository.id}`);
+      
+      // Add to in-memory store for future reference
+      if (!global.repositories) {
+        global.repositories = {};
+      }
+      global.repositories[repository.id] = repository;
+      
+      return res.json(repository);
+    } catch (error) {
+      log(`Error fetching repository information: ${error.message}`, 'error');
+      return res.status(500).json({ error: `Failed to fetch repository information: ${error.message}` });
+    }
+  } catch (error) {
+    log(`Unexpected error in /api/public-repositories: ${error.message}`, 'error');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GitHub OAuth redirect (simplified)
 app.get('/api/auth/github', (_, res) => {
   res.json({ message: 'OAuth is not configured in simplified mode' });
