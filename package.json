@@ -15,7 +15,9 @@
     "client": "npm run start --workspace client",
     "server": "npm run start --workspace server",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "build": "npm run build --workspaces",
+    "build": "node heroku-build.js",
+    "heroku-postbuild": "echo 'Skipping automatic build'",
+    "start": "cd server && npm start",
     "install:all": "npm install && npm install --workspace client && npm install --workspace server"
   },
   "devDependencies": {
