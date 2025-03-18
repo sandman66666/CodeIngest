@@ -44,6 +44,23 @@ try {
   // Then build the server using the simplified configuration
   console.log('Building server application with simplified configuration...');
   execSync('cd server && npm run build-simple', { stdio: 'inherit' });
+  
+  // Verify that the build output exists
+  const indexSimplePath = path.join(__dirname, 'server', 'dist', 'index-simple.js');
+  if (fs.existsSync(indexSimplePath)) {
+    console.log(`Successfully built index-simple.js at: ${indexSimplePath}`);
+    // Show the directory contents for debugging
+    console.log('Contents of the dist directory:');
+    const distDir = path.join(__dirname, 'server', 'dist');
+    const files = fs.readdirSync(distDir);
+    files.forEach(file => {
+      console.log(`- ${file}`);
+    });
+  } else {
+    console.error('ERROR: index-simple.js was not generated at the expected path!');
+    process.exit(1);
+  }
+  
   console.log('Server build completed successfully');
   
 } catch (error) {

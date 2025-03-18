@@ -1,1 +1,1 @@
-web: node server/dist/index-simple.js
+web: node server-heroku.js
