@@ -191,13 +191,22 @@ const store = {
 app.use(bodyParser.json());
 app.use(cors({
   origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
 
 // Log all requests
 app.use((req, res, next) => {
-  log(`${req.method} ${req.originalUrl}`);
+  log(`${req.method} ${req.originalUrl} from ${req.get('origin') || 'unknown origin'}`);
   next();
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  log(`Error processing request: ${err.message}`, 'error');
+  log(`Stack trace: ${err.stack}`, 'error');
+  res.status(500).json({ error: 'Internal server error', message: err.message });
 });
 
 // Serve static files in production
