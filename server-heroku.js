@@ -54,30 +54,66 @@ log(`Initializing server on port ${port}`);
 const githubApi = {
   async getRepoDetails(owner, repo, token = null) {
     try {
+      log(`GitHub API: Fetching repository details for ${owner}/${repo}`);
       const headers = token ? { Authorization: `token ${token}` } : {};
-      const response = await axios.get(`https://api.github.com/repos/${owner}/${repo}`, { headers });
+      
+      // Add User-Agent header to prevent GitHub API from rejecting the request
+      headers['User-Agent'] = 'CodeIngest-App';
+      
+      const url = `https://api.github.com/repos/${owner}/${repo}`;
+      log(`GitHub API Request: GET ${url}`);
+      
+      const response = await axios.get(url, { headers });
+      log(`GitHub API Response: Status ${response.status} for repository details`);
+      
       return response.data;
     } catch (error) {
-      console.error('Error fetching repository details:', error.message);
+      log(`Error fetching repository details: ${error.message}`, 'error');
+      if (error.response) {
+        log(`GitHub API Error Response: Status ${error.response.status}`, 'error');
+        log(`GitHub API Error Response Headers: ${JSON.stringify(error.response.headers)}`, 'error');
+      }
       throw new Error(`Failed to fetch repository details: ${error.message}`);
     }
   },
   
   async getRepoTree(owner, repo, branch = 'main', token = null) {
     try {
+      log(`GitHub API: Fetching repository tree for ${owner}/${repo} on branch ${branch}`);
       const headers = token ? { Authorization: `token ${token}` } : {};
-      const response = await axios.get(`https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`, { headers });
+      
+      // Add User-Agent header to prevent GitHub API from rejecting the request
+      headers['User-Agent'] = 'CodeIngest-App';
+      
+      const url = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
+      log(`GitHub API Request: GET ${url}`);
+      
+      const response = await axios.get(url, { headers });
+      log(`GitHub API Response: Status ${response.status} for repository tree with ${response.data.tree.length} items`);
+      
       return response.data;
     } catch (error) {
-      console.error('Error fetching repository tree:', error.message);
+      log(`Error fetching repository tree: ${error.message}`, 'error');
+      if (error.response) {
+        log(`GitHub API Error Response: Status ${error.response.status}`, 'error');
+      }
       throw new Error(`Failed to fetch repository tree: ${error.message}`);
     }
   },
   
   async getFileContent(owner, repo, path, branch = 'main', token = null) {
     try {
+      log(`GitHub API: Fetching file content for ${path} in ${owner}/${repo}`);
       const headers = token ? { Authorization: `token ${token}` } : {};
-      const response = await axios.get(`https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`, { headers });
+      
+      // Add User-Agent header to prevent GitHub API from rejecting the request
+      headers['User-Agent'] = 'CodeIngest-App';
+      
+      const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
+      log(`GitHub API Request: GET ${url}`);
+      
+      const response = await axios.get(url, { headers });
+      log(`GitHub API Response: Status ${response.status} for file content`);
       
       // GitHub API returns the content as base64 encoded
       if (response.data.content) {
@@ -85,7 +121,10 @@ const githubApi = {
       }
       return null;
     } catch (error) {
-      console.error(`Error fetching file content for ${path}:`, error.message);
+      log(`Error fetching file content for ${path}: ${error.message}`, 'error');
+      if (error.response) {
+        log(`GitHub API Error Response: Status ${error.response.status}`, 'error');
+      }
       return null;
     }
   },
@@ -270,16 +309,6 @@ if (process.env.NODE_ENV === 'production') {
   app.use(express.static(clientDistPath));
 }
 
-// Basic health check endpoint
-app.get('/api/health', (_, res) => {
-  return res.json({ 
-    status: 'healthy', 
-    message: 'Server is running in simplified mode with in-memory storage',
-    env: process.env.NODE_ENV || 'development',
-    port: port
-  });
-});
-
 // Public repositories endpoint
 app.post('/api/public-repositories', async (req, res) => {
   try {
@@ -314,7 +343,7 @@ app.post('/api/public-repositories', async (req, res) => {
       log(`Fetching repository tree for ${repoOwner}/${normalizedRepoName} on branch ${branch}`);
       const repoTree = await githubApi.getRepoTree(repoOwner, normalizedRepoName, branch);
       
-      // Create response object
+      // Create response object with detailed information for debugging
       const repository = {
         id: uuidv4(),
         url,
@@ -327,8 +356,9 @@ app.post('/api/public-repositories', async (req, res) => {
         createdAt: new Date().toISOString(),
         fileCount: repoTree.tree.filter(item => item.type === 'blob').length,
         size: repoDetails.size,
+        apiRequestsSuccessful: true,
         status: 'completed',
-        tree: repoTree.tree
+        tree: repoTree.tree.slice(0, 20) // Limit the tree size for performance
       };
       
       log(`Successfully created repository object: ${repository.id}`);
@@ -339,14 +369,36 @@ app.post('/api/public-repositories', async (req, res) => {
       }
       global.repositories[repository.id] = repository;
       
+      // For debugging in production, add extra diagnostics
+      if (process.env.NODE_ENV === 'production') {
+        log(`Production diagnostics - Repository object created: ${JSON.stringify({
+          id: repository.id,
+          owner: repository.owner,
+          repo: repository.repo,
+          fileCount: repository.fileCount,
+          createdAt: repository.createdAt
+        })}`);
+      }
+      
       return res.json(repository);
     } catch (error) {
       log(`Error fetching repository information: ${error.message}`, 'error');
-      return res.status(500).json({ error: `Failed to fetch repository information: ${error.message}` });
+      if (error.response && error.response.status) {
+        log(`GitHub API response status: ${error.response.status}`, 'error');
+        log(`GitHub API response headers: ${JSON.stringify(error.response.headers || {})}`, 'error');
+      }
+      return res.status(500).json({ 
+        error: `Failed to fetch repository information: ${error.message}`,
+        details: error.response ? { 
+          status: error.response.status,
+          statusText: error.response.statusText
+        } : null
+      });
     }
   } catch (error) {
     log(`Unexpected error in /api/public-repositories: ${error.message}`, 'error');
-    return res.status(500).json({ error: 'Internal server error' });
+    log(`Stack trace: ${error.stack}`, 'error');
+    return res.status(500).json({ error: 'Internal server error', message: error.message });
   }
 });
 
@@ -500,6 +552,16 @@ app.get('/api/repositories/:id', (req, res) => {
   }
   
   return res.json({ repository });
+});
+
+// Basic health check endpoint
+app.get('/api/health', (_, res) => {
+  return res.json({ 
+    status: 'healthy', 
+    message: 'Server is running in simplified mode with in-memory storage',
+    env: process.env.NODE_ENV || 'development',
+    port: port
+  });
 });
 
 // Start the server
