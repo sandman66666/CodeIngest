@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
@@ -19,14 +19,39 @@ const port = process.env.PORT || 3000;
 const store = InMemoryStore.getInstance();
 
 // In-memory storage for user sessions
-const userSessions = new Map<string, any>();
+const sessions: Record<string, any> = {};
+
+// Environment information
+const environment = process.env.NODE_ENV || 'development';
+const githubOAuthConfigured = process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET;
+const claudeApiConfigured = process.env.ANTHROPIC_API_KEY;
+
+// Configure middleware
+app.use(cors());
+app.use(bodyParser.json());
+
+// Add error handling for JSON parsing
+app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  if (err instanceof SyntaxError && 'body' in err) {
+    return res.status(400).json({ error: 'Invalid JSON' });
+  }
+  next(err);
+});
+
+// Serve static files from the client build directory
+if (process.env.NODE_ENV === 'production') {
+  const path = require('path');
+  const clientBuildPath = path.join(__dirname, '../../client/dist');
+  
+  console.log(`Serving static files from: ${clientBuildPath}`);
+  app.use(express.static(clientBuildPath));
+}
 
 // Middleware
 app.use(cors({
   origin: ['http://localhost:3001', 'http://127.0.0.1:3001'],
   credentials: true
 }));
-app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
@@ -82,14 +107,14 @@ app.get('/api/auth/github/callback', async (req: Request, res: Response) => {
 
     // Create session
     const sessionId = Math.random().toString(36).substring(2);
-    userSessions.set(sessionId, {
+    sessions[sessionId] = {
       id: userData.id,
       username: userData.login,
       email: userData.email,
       name: userData.name,
       avatarUrl: userData.avatar_url,
       accessToken: tokenData.access_token,
-    });
+    };
 
     // Create JWT
     const token = jwt.sign(
@@ -118,7 +143,7 @@ app.get('/api/auth/profile', async (req: Request, res: Response) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret') as { sessionId: string };
     const sessionId = decoded.sessionId;
     
-    const userData = userSessions.get(sessionId);
+    const userData = sessions[sessionId];
     if (!userData) {
       return res.status(401).json({ error: 'Invalid session' });
     }
@@ -646,8 +671,26 @@ app.use('/api/private-repositories', privateRepositoriesRouter);
 
 // Start the server
 app.listen(port, () => {
-  console.log(`Server running on port ${port} in simplified mode with in-memory storage`);
-  console.log(`Health check available at http://localhost:${port}/api/health`);
+  console.log(`Server running on port ${port} in ${environment} mode with in-memory storage`);
+  console.log(`GitHub OAuth configured: ${githubOAuthConfigured ? 'Yes' : 'No'}`);
+  console.log(`Claude API configured: ${claudeApiConfigured ? 'Yes' : 'No'}`);
+  
+  if (environment === 'production') {
+    console.log(`Server available at your app's URL`);
+  } else {
+    console.log(`Health check available at http://localhost:${port}/api/health`);
+  }
 });
+
+// Add catch-all route to serve index.html for client-side routing
+if (process.env.NODE_ENV === 'production') {
+  const path = require('path');
+  app.get('*', (req, res) => {
+    if (req.url.startsWith('/api')) {
+      return res.status(404).send('API endpoint not found');
+    }
+    res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
+  });
+}
 
 export default app;
