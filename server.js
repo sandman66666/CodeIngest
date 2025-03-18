@@ -1,31 +1,28 @@
-// Simple Express server for Heroku deployment
+// Super simple Express server for Heroku deployment
 const express = require('express');
 const path = require('path');
-const cors = require('cors');
 const app = express();
 
 // Configuration
 const PORT = process.env.PORT || 3000;
-const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// Middleware
-app.use(cors());
+// Middleware - minimal
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'client/dist')));
+app.use(express.static(path.join(__dirname)));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok',
-    environment: NODE_ENV,
-    timestamp: new Date().toISOString()
+    environment: process.env.NODE_ENV || 'development',
+    timestamp: new Date().toISOString(),
+    message: 'CodeIngest API is running'
   });
 });
 
-// Mock API endpoint to show server is working
+// Mock repositories endpoint
 app.get('/api/repositories', (req, res) => {
   res.json({
-    message: 'This is a mock API response. The server is working!',
     repositories: [
       { 
         id: '1', 
@@ -38,20 +35,16 @@ app.get('/api/repositories', (req, res) => {
   });
 });
 
-// Serve the React app for all other routes (client-side routing)
+// Catch-all route for client-side routing
 app.get('*', (req, res) => {
   if (req.url.startsWith('/api')) {
     return res.status(404).json({ error: 'API endpoint not found' });
   }
-  res.sendFile(path.join(__dirname, 'client/dist/index.html'));
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // Start the server
 app.listen(PORT, () => {
-  console.log(`
--------------------------------------------------------
-| Server running on port ${PORT} in ${NODE_ENV} mode
-| Health check: http${NODE_ENV === 'production' ? 's' : ''}://${NODE_ENV === 'production' ? 'your-app-domain' : 'localhost:' + PORT}/api/health
--------------------------------------------------------
-  `);
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });

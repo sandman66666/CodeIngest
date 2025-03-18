@@ -1,0 +1,17 @@
+{
+  "name": "CodeIngest",
+  "description": "A tool for code analysis and insights",
+  "repository": "https://github.com/yourusername/CodeIngest",
+  "keywords": ["node", "express", "static"],
+  "env": {
+    "NODE_ENV": {
+      "description": "Environment setting",
+      "value": "production"
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ]
+}
