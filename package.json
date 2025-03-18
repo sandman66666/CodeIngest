@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "node server.js",
-    "build": "echo 'Using simplified build process'"
+    "build": "echo 'Using simplified build process'",
+    "heroku-postbuild": "npm install --no-shrinkwrap --no-package-lock"
   },
   "dependencies": {
     "express": "^4.18.2",
