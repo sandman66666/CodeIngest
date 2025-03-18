@@ -5,7 +5,8 @@
     "rootDir": "src",
     "baseUrl": "src",
     "paths": {
-      "@/*": ["*"]
+      "@/*": ["*"],
+      "@codeinsight/common": ["../common/src"]
     },
     "typeRoots": ["./node_modules/@types", "./src/types"],
     "module": "CommonJS",
@@ -15,7 +16,12 @@
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
     "noImplicitAny": false,
-    "strictNullChecks": false
+    "strictNullChecks": false,
+    "noEmitOnError": false, 
+    "noImplicitReturns": false,
+    "strict": false,
+    "ignoreDeprecations": "5.0",
+    "allowJs": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
