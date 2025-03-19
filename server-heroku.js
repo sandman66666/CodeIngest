@@ -56,7 +56,13 @@ const githubApi = {
   async getRepoDetails(owner, repo, token = null) {
     try {
       log(`GitHub API: Fetching repository details for ${owner}/${repo}`);
-      const headers = token ? { Authorization: `token ${token}` } : {};
+      const headers = {};
+      
+      // Add authentication if token is provided
+      if (token) {
+        log(`Using provided authentication token for GitHub API`, 'info');
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       
       // Add User-Agent header to prevent GitHub API from rejecting the request
       headers['User-Agent'] = 'CodeIngest-App';
@@ -81,7 +87,13 @@ const githubApi = {
   async getRepoTree(owner, repo, branch = 'main', token = null) {
     try {
       log(`GitHub API: Fetching repository tree for ${owner}/${repo} on branch ${branch}`);
-      const headers = token ? { Authorization: `token ${token}` } : {};
+      const headers = {};
+      
+      // Add authentication if token is provided
+      if (token) {
+        log(`Using provided authentication token for GitHub API`, 'info');
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       
       // Add User-Agent header to prevent GitHub API from rejecting the request
       headers['User-Agent'] = 'CodeIngest-App';
@@ -105,7 +117,13 @@ const githubApi = {
   async getFileContent(owner, repo, path, branch = 'main', token = null) {
     try {
       log(`GitHub API: Fetching file content for ${path} in ${owner}/${repo}`);
-      const headers = token ? { Authorization: `token ${token}` } : {};
+      const headers = {};
+      
+      // Add authentication if token is provided
+      if (token) {
+        log(`Using provided authentication token for GitHub API`, 'info');
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       
       // Add User-Agent header to prevent GitHub API from rejecting the request
       headers['User-Agent'] = 'CodeIngest-App';
@@ -186,6 +204,7 @@ const store = {
   users: [{ id: 'user-1', name: 'Demo User', email: 'demo@example.com' }],
   repositories: [],
   analyses: [],
+  sessions: new Map(),
   
   getUsers() {
     return this.users;
@@ -230,11 +249,36 @@ const store = {
 // Middleware for CORS and parsing
 app.use(bodyParser.json());
 app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  origin: '*', // Allow requests from any origin
+  methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
 }));
+
+// JWT verification middleware
+const verifyToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  
+  try {
+    const decoded = require('jsonwebtoken').verify(token, process.env.JWT_SECRET || 'default-secret');
+    const sessionId = decoded.sessionId;
+    
+    const userData = store.sessions.get(sessionId);
+    if (!userData) {
+      return res.status(401).json({ error: 'Invalid session' });
+    }
+    
+    req.user = userData;
+    next();
+  } catch (error) {
+    log(`JWT verification error: ${error.message}`, 'error');
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+};
 
 // Log all requests
 app.use((req, res, next) => {
@@ -309,6 +353,128 @@ if (process.env.NODE_ENV === 'production') {
   
   app.use(express.static(clientDistPath));
 }
+
+// GitHub OAuth redirect
+app.get('/api/auth/github', (req, res) => {
+  const clientId = process.env.GITHUB_CLIENT_ID;
+  if (!clientId) {
+    log('GitHub OAuth is not configured properly - missing GITHUB_CLIENT_ID', 'error');
+    return res.status(500).json({ error: 'GitHub OAuth is not configured properly' });
+  }
+
+  // For Heroku, construct the callback URL based on the request origin
+  const host = req.headers.host || '';
+  const protocol = req.headers['x-forwarded-proto'] || 'http';
+  const callbackUrl = `${protocol}://${host}/api/auth/github/callback`;
+  
+  log(`Initiating GitHub OAuth flow with callback URL: ${callbackUrl}`, 'info');
+  const scope = 'repo read:user user:email';
+  
+  const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${callbackUrl}&scope=${scope}`;
+  log(`Redirecting to GitHub auth URL: ${githubAuthUrl}`, 'info');
+  res.redirect(githubAuthUrl);
+});
+
+// GitHub OAuth callback
+app.get('/api/auth/github/callback', async (req, res) => {
+  const { code } = req.query;
+  if (!code) {
+    log('Missing code in GitHub callback', 'error');
+    const clientUrl = process.env.REACT_APP_CLIENT_URL || `${req.protocol}://${req.headers.host}`;
+    return res.redirect(`${clientUrl}/login?error=missing_code`);
+  }
+
+  try {
+    const clientId = process.env.GITHUB_CLIENT_ID;
+    const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) {
+      log('GitHub OAuth is not configured properly - missing client ID or secret', 'error');
+      const clientUrl = process.env.REACT_APP_CLIENT_URL || `${req.protocol}://${req.headers.host}`;
+      return res.redirect(`${clientUrl}/login?error=configuration_error`);
+    }
+
+    log(`Exchanging GitHub code for access token`, 'info');
+    // Exchange code for access token
+    const tokenResponse = await axios.post('https://github.com/login/oauth/access_token', {
+      client_id: clientId,
+      client_secret: clientSecret,
+      code,
+    }, {
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+
+    const tokenData = tokenResponse.data;
+    if (tokenData.error) {
+      log(`GitHub token error: ${tokenData.error}`, 'error');
+      const clientUrl = process.env.REACT_APP_CLIENT_URL || `${req.protocol}://${req.headers.host}`;
+      return res.redirect(`${clientUrl}/login?error=${tokenData.error}`);
+    }
+
+    // Get user data from GitHub
+    log(`Fetching GitHub user profile with token`, 'info');
+    const userResponse = await axios.get('https://api.github.com/user', {
+      headers: {
+        'Authorization': `Bearer ${tokenData.access_token}`,
+        'User-Agent': 'CodeIngest-App'
+      }
+    });
+
+    const userData = userResponse.data;
+    log(`Received GitHub user data for: ${userData.login}`, 'info');
+
+    // Create session
+    const sessionId = Math.random().toString(36).substring(2);
+    store.sessions.set(sessionId, {
+      id: userData.id,
+      username: userData.login,
+      email: userData.email,
+      name: userData.name,
+      avatarUrl: userData.avatar_url,
+      accessToken: tokenData.access_token,
+    });
+
+    // Create JWT
+    const jwt = require('jsonwebtoken');
+    const token = jwt.sign(
+      { sessionId },
+      process.env.JWT_SECRET || 'default-secret',
+      { expiresIn: '7d', algorithm: 'HS256' }
+    );
+
+    // Redirect back to the client with the token
+    const clientUrl = process.env.REACT_APP_CLIENT_URL || `${req.protocol}://${req.headers.host}`;
+    log(`Authentication successful, redirecting to: ${clientUrl}/auth/callback with token`, 'info');
+    return res.redirect(`${clientUrl}/auth/callback?token=${token}`);
+  } catch (error) {
+    log(`Authentication error: ${error.message}`, 'error');
+    if (error.response) {
+      log(`Response status: ${error.response.status}`, 'error');
+      log(`Response data: ${JSON.stringify(error.response.data)}`, 'error');
+    }
+    const clientUrl = process.env.REACT_APP_CLIENT_URL || `${req.protocol}://${req.headers.host}`;
+    return res.redirect(`${clientUrl}/login?error=server_error`);
+  }
+});
+
+// User profile endpoint
+app.get('/api/auth/profile', verifyToken, (req, res) => {
+  const userData = req.user;
+  log(`Returning profile data for user: ${userData.username}`, 'info');
+  
+  return res.json({
+    status: 'success',
+    data: {
+      id: userData.id,
+      login: userData.username,
+      name: userData.name,
+      email: userData.email,
+      avatarUrl: userData.avatarUrl,
+    },
+  });
+});
 
 // Public repositories endpoint
 app.post('/api/public-repositories', async (req, res) => {
@@ -504,18 +670,8 @@ app.post('/api/public-repositories', async (req, res) => {
   }
 });
 
-// GitHub OAuth redirect (simplified)
-app.get('/api/auth/github', (_, res) => {
-  res.json({ message: 'OAuth is not configured in simplified mode' });
-});
-
-// GitHub OAuth callback (simplified)
-app.get('/api/auth/github/callback', (_, res) => {
-  res.json({ message: 'OAuth callback is not configured in simplified mode' });
-});
-
 // Get repositories endpoint
-app.get('/api/repositories', (_, res) => {
+app.get('/api/repositories', verifyToken, (_, res) => {
   const userId = store.getUsers()[0].id;
   const repositories = store.getRepositories(userId);
   
@@ -523,10 +679,16 @@ app.get('/api/repositories', (_, res) => {
 });
 
 // Add repository endpoint with GitHub API integration
-app.post('/api/repositories', async (req, res) => {
+app.post('/api/repositories', verifyToken, async (req, res) => {
   try {
     const { url, includePatterns = ["**/*"], excludePatterns = [] } = req.body;
-    const token = req.headers.authorization?.replace('Bearer ', '');
+    
+    // Get the authenticated user's token if available
+    let token = null;
+    if (req.user && req.user.accessToken) {
+      token = req.user.accessToken;
+      log(`Using authenticated user's token for GitHub API requests`, 'info');
+    }
     
     if (!url) {
       return res.status(400).json({ error: 'GitHub repository URL is required' });
@@ -645,7 +807,7 @@ app.post('/api/repositories', async (req, res) => {
 });
 
 // Get repository details endpoint
-app.get('/api/repositories/:id', (req, res) => {
+app.get('/api/repositories/:id', verifyToken, (req, res) => {
   const { id } = req.params;
   const repository = store.getRepositoryById(id);
   
@@ -657,7 +819,7 @@ app.get('/api/repositories/:id', (req, res) => {
 });
 
 // Analysis endpoint for handling OpenAI analysis
-app.post('/api/analysis/:id', async (req, res) => {
+app.post('/api/analysis/:id', verifyToken, async (req, res) => {
   try {
     log(`POST request to /api/analysis/${req.params.id}`);
     const { id } = req.params;
@@ -835,7 +997,7 @@ app.post('/api/analysis/:id', async (req, res) => {
 });
 
 // Get analysis results endpoint
-app.get('/api/analysis/:id', async (req, res) => {
+app.get('/api/analysis/:id', verifyToken, async (req, res) => {
   try {
     log(`GET request to /api/analysis/${req.params.id}`);
     const { id } = req.params;
@@ -894,7 +1056,7 @@ function updateAnalysisStatus(id, status, error = null, results = null) {
 }
 
 // Debug endpoint to check environment variables (useful for Heroku debugging)
-app.get('/api/debug-env', (req, res) => {
+app.get('/api/debug-env', verifyToken, (req, res) => {
   log('Received request to debug environment variables');
   
   // Create a safe version of the environment that doesn't expose full secrets
