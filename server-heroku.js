@@ -6,6 +6,7 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const fs = require('fs');
+const OpenAI = require('openai');
 
 // Logging setup
 function log(message, level = 'info') {
@@ -736,87 +737,60 @@ app.post('/api/analysis/:id', async (req, res) => {
         
         log(`Code content size: ${Math.round(codeContent.length / 1024)} KB`);
         
-        // Make request to OpenAI API
-        log('Sending request to OpenAI API');
+        // Create OpenAI client instance
+        const openai = new OpenAI({
+          apiKey: openaiApiKey.trim(),
+        });
         
-        try {
-          // Set the OpenAI API key in environment
-          process.env.OPENAI_API_KEY = openaiApiKey;
-          
-          // Make request to OpenAI
-          const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-            model: 'gpt-4',
-            messages: [
-              {
-                role: 'system',
-                content: `You are a code analysis assistant. Analyze the following code and provide insightful feedback, 
-                suggestions for improvements, and identify potential bugs or vulnerabilities. 
-                Focus on the most important aspects of the code. Your response should be structured in JSON format with the following fields:
-                [
-                  {
-                    "id": "unique-id",
-                    "title": "Brief title of the insight",
-                    "description": "Detailed explanation",
-                    "severity": "high/medium/low",
-                    "category": "bug/security/performance/maintainability"
-                  }
-                ]`
-              },
-              {
-                role: 'user',
-                content: `Analyze this code repository:\n\n${codeContent}`
-              }
-            ],
-            temperature: 0.3,
-            max_tokens: 3000
-          }, {
-            headers: {
-              'Authorization': `Bearer ${openaiApiKey.trim()}`,
-              'Content-Type': 'application/json'
+        // Make request to OpenAI using the client library
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4',
+          messages: [
+            {
+              role: 'system',
+              content: `You are a code analysis assistant. Analyze the following code and provide insightful feedback, 
+              suggestions for improvements, and identify potential bugs or vulnerabilities. 
+              Focus on the most important aspects of the code. Your response should be structured in JSON format with the following fields:
+              [
+                {
+                  "id": "unique-id",
+                  "title": "Brief title of the insight",
+                  "description": "Detailed explanation",
+                  "severity": "high/medium/low",
+                  "category": "bug/security/performance/maintainability"
+                }
+              ]`
+            },
+            {
+              role: 'user',
+              content: `Analyze this code repository:\n\n${codeContent}`
             }
-          });
-          
-          log('Received response from OpenAI API');
-          
-          // Parse the response and extract results
-          let results = [];
-          try {
-            const content = response.data.choices[0].message.content;
-            results = JSON.parse(content);
-          } catch (parseError) {
-            log(`Error parsing OpenAI response: ${parseError.message}`, 'error');
-            results = [{
-              id: 'parse-error',
-              title: 'Error processing analysis results',
-              description: 'The analysis completed but the results could not be properly formatted.',
-              severity: 'low',
-              category: 'other'
-            }];
-          }
-          
-          // Update analysis with results
-          updateAnalysisStatus(analysisId, 'completed', null, results);
-          log(`Analysis completed successfully with ${results.length} insights`);
-          
-        } catch (apiError) {
-          log(`OpenAI API error: ${apiError.message}`, 'error');
-          if (apiError.response) {
-            log(`Status: ${apiError.response.status}`, 'error');
-            log(`Data: ${JSON.stringify(apiError.response.data)}`, 'error');
-          }
-          
-          let errorMessage = 'Failed to analyze code with OpenAI';
-          
-          if (apiError.response && apiError.response.status === 401) {
-            errorMessage = 'Invalid OpenAI API key';
-          } else if (apiError.response && apiError.response.status === 429) {
-            errorMessage = 'OpenAI API rate limit exceeded';
-          } else if (apiError.message.includes('content size too large')) {
-            errorMessage = 'Code content too large for analysis';
-          }
-          
-          updateAnalysisStatus(analysisId, 'failed', errorMessage);
+          ],
+          temperature: 0.3,
+          max_tokens: 3000
+        });
+        
+        log('Received response from OpenAI API');
+        
+        // Parse the response and extract results
+        let results = [];
+        try {
+          const content = response.choices[0].message.content;
+          results = JSON.parse(content);
+        } catch (parseError) {
+          log(`Error parsing OpenAI response: ${parseError.message}`, 'error');
+          results = [{
+            id: 'parse-error',
+            title: 'Error processing analysis results',
+            description: 'The analysis completed but the results could not be properly formatted.',
+            severity: 'low',
+            category: 'other'
+          }];
         }
+        
+        // Update analysis with results
+        updateAnalysisStatus(analysisId, 'completed', null, results);
+        log(`Analysis completed successfully with ${results.length} insights`);
         
       } catch (error) {
         log(`Error during analysis: ${error.message}`, 'error');
