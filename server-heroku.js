@@ -364,13 +364,13 @@ app.get('/api/auth/github', (req, res) => {
 
   // For Heroku, construct the callback URL based on the request origin
   const host = req.headers.host || '';
-  const protocol = req.headers['x-forwarded-proto'] || 'http';
-  const callbackUrl = `${protocol}://${host}/api/auth/github/callback`;
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+  const callbackUrl = process.env.GITHUB_CALLBACK_URL || `${protocol}://${host}/api/auth/github/callback`;
   
   log(`Initiating GitHub OAuth flow with callback URL: ${callbackUrl}`, 'info');
   const scope = 'repo read:user user:email';
   
-  const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${callbackUrl}&scope=${scope}`;
+  const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(callbackUrl)}&scope=${scope}`;
   log(`Redirecting to GitHub auth URL: ${githubAuthUrl}`, 'info');
   res.redirect(githubAuthUrl);
 });
@@ -387,19 +387,23 @@ app.get('/api/auth/github/callback', async (req, res) => {
   try {
     const clientId = process.env.GITHUB_CLIENT_ID;
     const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+    const host = req.headers.host || '';
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const callbackUrl = process.env.GITHUB_CALLBACK_URL || `${protocol}://${host}/api/auth/github/callback`;
 
     if (!clientId || !clientSecret) {
       log('GitHub OAuth is not configured properly - missing client ID or secret', 'error');
-      const clientUrl = process.env.REACT_APP_CLIENT_URL || `${req.protocol}://${req.headers.host}`;
+      const clientUrl = process.env.REACT_APP_CLIENT_URL || `${protocol}://${host}`;
       return res.redirect(`${clientUrl}/login?error=configuration_error`);
     }
 
-    log(`Exchanging GitHub code for access token`, 'info');
+    log(`Exchanging GitHub code for access token with callback URL: ${callbackUrl}`, 'info');
     // Exchange code for access token
     const tokenResponse = await axios.post('https://github.com/login/oauth/access_token', {
       client_id: clientId,
       client_secret: clientSecret,
       code,
+      redirect_uri: callbackUrl
     }, {
       headers: {
         'Accept': 'application/json'

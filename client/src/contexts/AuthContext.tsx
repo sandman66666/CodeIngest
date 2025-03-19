@@ -102,8 +102,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const login = () => {
-    // For real GitHub OAuth flow
-    window.location.href = '/api/auth/github';
+    // Get the current base URL for the app, both in development and production
+    const baseUrl = window.location.origin;
+    const authUrl = `${baseUrl}/api/auth/github`;
+    
+    // Log the redirection for debugging
+    console.log(`Redirecting to GitHub auth URL: ${authUrl}`);
+    
+    // Redirect to GitHub auth
+    window.location.href = authUrl;
   };
 
   const logout = async () => {
