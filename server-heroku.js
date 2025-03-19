@@ -343,6 +343,93 @@ app.post('/api/public-repositories', async (req, res) => {
       log(`Fetching repository tree for ${repoOwner}/${normalizedRepoName} on branch ${branch}`);
       const repoTree = await githubApi.getRepoTree(repoOwner, normalizedRepoName, branch);
       
+      // Get file contents for code files (limit to reasonable size and number)
+      log(`Fetching file contents for ${repoOwner}/${normalizedRepoName}`);
+      const MAX_FILES = 50; // Limit number of files to fetch
+      const MAX_SIZE_KB = 500; // Don't fetch files larger than 500KB
+      const EXCLUDED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.woff', '.ttf', '.eot', '.mp3', '.mp4', '.zip', '.tar', '.gz'];
+      
+      // Filter tree to get only code files within size limits
+      const codeFiles = repoTree.tree
+        .filter(item => {
+          // Only include blob files (not directories)
+          if (item.type !== 'blob') return false;
+          
+          // Check file size (in KB)
+          const sizeKB = (item.size || 0) / 1024;
+          if (sizeKB > MAX_SIZE_KB) return false;
+          
+          // Check file extension
+          const extension = item.path.includes('.') ? 
+            item.path.substring(item.path.lastIndexOf('.')).toLowerCase() : '';
+          return !EXCLUDED_EXTENSIONS.includes(extension);
+        })
+        .slice(0, MAX_FILES); // Limit number of files
+      
+      log(`Found ${codeFiles.length} code files to fetch`);
+      
+      // Fetch content for each file and build consolidated code string
+      const fileContents = [];
+      const consolidatedCode = [];
+      let totalSizeBytes = 0;
+      
+      for (const file of codeFiles) {
+        try {
+          log(`Fetching content for ${file.path}`);
+          // Get file content directly from GitHub raw URL to avoid base64 encoding/decoding
+          const fileContent = await githubApi.getFileContent(repoOwner, normalizedRepoName, file.path, branch);
+          
+          if (fileContent) {
+            fileContents.push({
+              path: file.path,
+              content: fileContent
+            });
+            
+            consolidatedCode.push(
+              `// ****************************************************`,
+              `// File: ${file.path}`,
+              `// ****************************************************`,
+              ``,
+              fileContent,
+              ``,
+              ``
+            );
+            
+            totalSizeBytes += (fileContent.length || 0);
+          }
+        } catch (error) {
+          log(`Error fetching content for ${file.path}: ${error.message}`, 'error');
+          // Continue with other files even if one fails
+        }
+      }
+      
+      const fullCode = consolidatedCode.join('\n');
+      log(`Generated consolidated code: ${Math.round(totalSizeBytes / 1024)} KB`);
+      
+      // Generate tree display
+      const treeDisplay = [];
+      const processedPaths = new Set();
+      
+      repoTree.tree.forEach(item => {
+        const parts = item.path.split('/');
+        let indent = '';
+        
+        for (let i = 0; i < parts.length; i++) {
+          const currentPath = parts.slice(0, i + 1).join('/');
+          
+          if (!processedPaths.has(currentPath)) {
+            processedPaths.add(currentPath);
+            
+            if (i === parts.length - 1 && item.type === 'blob') {
+              treeDisplay.push(`${indent}├── ${parts[i]}`);
+            } else {
+              treeDisplay.push(`${indent}└── ${parts[i]}/`);
+              indent += '    ';
+            }
+          }
+        }
+      });
+      
       // Create response object with detailed information for debugging
       const repository = {
         id: uuidv4(),
@@ -356,9 +443,19 @@ app.post('/api/public-repositories', async (req, res) => {
         createdAt: new Date().toISOString(),
         fileCount: repoTree.tree.filter(item => item.type === 'blob').length,
         size: repoDetails.size,
+        language: repoDetails.language || 'Unknown',
+        stargazersCount: repoDetails.stargazers_count || 0,
+        forksCount: repoDetails.forks_count || 0,
         apiRequestsSuccessful: true,
         status: 'completed',
-        tree: repoTree.tree.slice(0, 20) // Limit the tree size for performance
+        tree: repoTree.tree.slice(0, 20), // Limit the tree size for performance
+        ingestedContent: {
+          summary: `Repository: ${repoDetails.full_name}\nDescription: ${repoDetails.description || 'None'}\nLanguage: ${repoDetails.language || 'Unknown'}\nTotal Files: ${repoTree.tree.filter(item => item.type === 'blob').length}\nFetched Files: ${fileContents.length}`,
+          tree: treeDisplay.join('\n'),
+          fullCode: fullCode,
+          fileCount: codeFiles.length,
+          sizeInBytes: totalSizeBytes
+        }
       };
       
       log(`Successfully created repository object: ${repository.id}`);
