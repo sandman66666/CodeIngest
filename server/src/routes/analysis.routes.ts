@@ -9,20 +9,13 @@ const analysisResults = new Map<string, any>();
 
 router.post('/:owner/:repo', async (req, res) => {
   const { owner, repo } = req.params;
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
-    throw new ApiError(401, 'No token provided');
-  }
-
-  const token = authHeader.split(' ')[1];
-
+  
   try {
     // Get repository contents from GitHub
     const response = await fetch(
       `https://api.github.com/repos/${owner}/${repo}/contents`,
       {
         headers: {
-          Authorization: `Bearer ${token}`,
           Accept: 'application/vnd.github.v3+json',
         },
       }
