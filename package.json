@@ -20,11 +20,18 @@
     "axios": "^1.4.0",
     "uuid": "^9.0.0",
     "jsonwebtoken": "^9.0.0",
-    "glob": "^8.1.0",
+    "glob": "^10.4.5",
     "fs-extra": "^11.1.1",
     "child_process": "^1.0.2",
     "util": "^0.12.5",
     "os": "^0.1.2",
-    "buffer": "^6.0.3"
+    "buffer": "^6.0.3",
+    "base64-js": "^1.5.1",
+    "ieee754": "^1.2.1",
+    "once": "^1.4.0",
+    "wrappy": "^1.0.2",
+    "minimatch": "^9.0.5",
+    "inflight": "^1.0.6",
+    "fs.realpath": "^1.0.0"
   }
 }
