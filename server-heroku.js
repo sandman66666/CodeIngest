@@ -1110,4 +1110,5 @@ app.listen(port, () => {
   log(`Server running on port ${port}`);
   log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   log(`GitHub OAuth: ${process.env.GITHUB_CLIENT_ID ? 'Configured' : 'Not configured'}`);
+  log(`OpenAI API: ${process.env.OPENAI_API_KEY ? 'Configured' : 'Not configured'}`);
 });
