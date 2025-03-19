@@ -380,7 +380,10 @@ app.get('/api/auth/github/callback', async (req, res) => {
   const { code } = req.query;
   if (!code) {
     log('Missing code in GitHub callback', 'error');
-    const clientUrl = process.env.REACT_APP_CLIENT_URL || `${req.protocol}://${req.headers.host}`;
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const host = req.headers.host || '';
+    const clientUrl = process.env.REACT_APP_CLIENT_URL || `${protocol}://${host}`;
+    log(`Redirecting to client URL after missing code: ${clientUrl}/login?error=missing_code`, 'info');
     return res.redirect(`${clientUrl}/login?error=missing_code`);
   }
 
@@ -390,10 +393,11 @@ app.get('/api/auth/github/callback', async (req, res) => {
     const host = req.headers.host || '';
     const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
     const callbackUrl = process.env.GITHUB_CALLBACK_URL || `${protocol}://${host}/api/auth/github/callback`;
+    const clientUrl = process.env.REACT_APP_CLIENT_URL || `${protocol}://${host}`;
 
     if (!clientId || !clientSecret) {
       log('GitHub OAuth is not configured properly - missing client ID or secret', 'error');
-      const clientUrl = process.env.REACT_APP_CLIENT_URL || `${protocol}://${host}`;
+      log(`Redirecting to client URL after configuration error: ${clientUrl}/login?error=configuration_error`, 'info');
       return res.redirect(`${clientUrl}/login?error=configuration_error`);
     }
 
@@ -413,7 +417,7 @@ app.get('/api/auth/github/callback', async (req, res) => {
     const tokenData = tokenResponse.data;
     if (tokenData.error) {
       log(`GitHub token error: ${tokenData.error}`, 'error');
-      const clientUrl = process.env.REACT_APP_CLIENT_URL || `${req.protocol}://${req.headers.host}`;
+      log(`Redirecting to client URL after token error: ${clientUrl}/login?error=${tokenData.error}`, 'info');
       return res.redirect(`${clientUrl}/login?error=${tokenData.error}`);
     }
 
@@ -449,7 +453,6 @@ app.get('/api/auth/github/callback', async (req, res) => {
     );
 
     // Redirect back to the client with the token
-    const clientUrl = process.env.REACT_APP_CLIENT_URL || `${req.protocol}://${req.headers.host}`;
     log(`Authentication successful, redirecting to: ${clientUrl}/auth/callback with token`, 'info');
     return res.redirect(`${clientUrl}/auth/callback?token=${token}`);
   } catch (error) {
@@ -458,7 +461,10 @@ app.get('/api/auth/github/callback', async (req, res) => {
       log(`Response status: ${error.response.status}`, 'error');
       log(`Response data: ${JSON.stringify(error.response.data)}`, 'error');
     }
-    const clientUrl = process.env.REACT_APP_CLIENT_URL || `${req.protocol}://${req.headers.host}`;
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const host = req.headers.host || '';
+    const clientUrl = process.env.REACT_APP_CLIENT_URL || `${protocol}://${host}`;
+    log(`Redirecting to client URL after server error: ${clientUrl}/login?error=server_error`, 'info');
     return res.redirect(`${clientUrl}/login?error=server_error`);
   }
 });

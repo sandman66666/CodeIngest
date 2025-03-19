@@ -94,6 +94,16 @@ class ApiClient {
       });
       return response.data.data;
     },
+    
+    start: async (repositoryId: string, apiKey?: string): Promise<{ analysisId: string }> => {
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
+      const response = await this.client.post(`/analysis/${repositoryId}`, { apiKey }, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      return response.data;
+    },
 
     delete: async (id: string): Promise<void> => {
       await this.client.delete(`/analyses/${id}`);
