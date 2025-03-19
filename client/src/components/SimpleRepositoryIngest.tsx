@@ -59,7 +59,7 @@ export function SimpleRepositoryIngest() {
     try {
       // Send the full URL to the API
       addLog('Sending request to API with full GitHub URL...');
-      const response = await axios.post<IngestResponse>('http://localhost:3030/api/public-repositories', {
+      const response = await axios.post<IngestResponse>('/api/public-repositories', {
         url: repoUrl
       });
       

@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Only attempt API call if we have a token
       try {
-        const response = await fetch('http://localhost:3030/api/auth/profile', {
+        const response = await fetch('/api/auth/profile', {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -103,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = () => {
     // For real GitHub OAuth flow
-    window.location.href = 'http://localhost:3030/api/auth/github';
+    window.location.href = '/api/auth/github';
   };
 
   const logout = async () => {
@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       localStorage.setItem('token', token);
       
-      const response = await fetch('http://localhost:3030/api/auth/profile', {
+      const response = await fetch('/api/auth/profile', {
         headers: {
           Authorization: `Bearer ${token}`,
         },

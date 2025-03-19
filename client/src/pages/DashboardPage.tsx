@@ -38,7 +38,7 @@ export function DashboardPage() {
   const fetchRepositories = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3030/api/repositories', {
+      const response = await fetch('/api/repositories', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
