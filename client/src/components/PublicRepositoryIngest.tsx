@@ -119,11 +119,8 @@ export function PublicRepositoryIngest() {
       setIsLoading(true);
       setAnalysisStarted(true);
       
-      // Use OpenAI API key from environment variable in production
-      // For development, the key should be configured on the server-side
-      const response = await axios.post(`/api/analysis/${ingestionResult.repository.id}`, {
-        apiKey: '' // Empty string will make the server use its environment variable
-      });
+      // Call the analysis endpoint - server will use its environment variable for API key
+      const response = await axios.post(`/api/analysis/${ingestionResult.repository.id}`);
       
       setAnalysisId(response.data.analysisId);
       

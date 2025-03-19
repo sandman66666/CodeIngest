@@ -15,8 +15,7 @@ const envSchema = z.object({
   GITHUB_CLIENT_ID: z.string(),
   GITHUB_CLIENT_SECRET: z.string(),
   GITHUB_CALLBACK_URL: z.string().url(),
-  ANTHROPIC_API_KEY: z.string(),
-  CLAUDE_API_KEY: z.string(),
+  OPENAI_API_KEY: z.string(),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(100),
 });
@@ -32,8 +31,7 @@ const env = envSchema.parse({
   GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID,
   GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET,
   GITHUB_CALLBACK_URL: process.env.GITHUB_CALLBACK_URL,
-  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-  CLAUDE_API_KEY: process.env.CLAUDE_API_KEY,
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   RATE_LIMIT_WINDOW_MS: process.env.RATE_LIMIT_WINDOW_MS,
   RATE_LIMIT_MAX_REQUESTS: process.env.RATE_LIMIT_MAX_REQUESTS,
 });

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { ApiError } from '../middleware/error.middleware';
-import { claudeService } from '../services/claude.service';
+import { openAIService } from '../services/openai-service';
 
 const router = Router();
 
@@ -41,7 +41,7 @@ router.post('/:owner/:repo', async (req, res) => {
       const content = await fileResponse.text();
       return {
         file: file.path,
-        analysis: await claudeService.analyzeCodeStructured(content),
+        analysis: await openAIService.analyzeCodeStructured(content),
       };
     });
 

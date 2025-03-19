@@ -79,11 +79,15 @@ app.get('/api/auth/github', (_, res: Response) => {
 
 app.get('/api/auth/github/callback', async (req: Request, res: Response) => {
   const { code } = req.query as { code: string };
+  
   if (!code) {
+    console.error('Missing code parameter in GitHub callback');
     return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3001'}/login?error=missing_code`);
   }
 
   try {
+    console.log('Processing GitHub callback with code');
+    
     // Exchange code for access token
     const tokenResponse = await axios.post('https://github.com/login/oauth/access_token', {
       client_id: process.env.GITHUB_CLIENT_ID,
@@ -96,10 +100,19 @@ app.get('/api/auth/github/callback', async (req: Request, res: Response) => {
     });
 
     const tokenData = tokenResponse.data;
+    
     if (tokenData.error) {
+      console.error('GitHub token error:', tokenData.error);
       return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3001'}/login?error=${tokenData.error}`);
     }
 
+    if (!tokenData.access_token) {
+      console.error('No access token in GitHub response');
+      return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3001'}/login?error=no_access_token`);
+    }
+
+    console.log('Successfully received GitHub access token');
+    
     // Get user data from GitHub
     const userResponse = await axios.get('https://api.github.com/user', {
       headers: {
@@ -108,17 +121,15 @@ app.get('/api/auth/github/callback', async (req: Request, res: Response) => {
     });
 
     const userData = userResponse.data;
-    if (!userData) {
-      return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3001'}/login?error=github_api_error`);
-    }
-
+    console.log('Received user data for:', userData.login);
+    
     // Create session
     const sessionId = Math.random().toString(36).substring(2);
     sessions[sessionId] = {
       id: userData.id,
       username: userData.login,
-      email: userData.email,
-      name: userData.name,
+      email: userData.email || `${userData.login}@example.com`, // Fallback if no email
+      name: userData.name || userData.login,
       avatarUrl: userData.avatar_url,
       accessToken: tokenData.access_token,
     };
@@ -130,6 +141,8 @@ app.get('/api/auth/github/callback', async (req: Request, res: Response) => {
       { expiresIn: '7d' }
     );
 
+    console.log('Generated JWT token, redirecting to client');
+    
     // Redirect back to the client with the token
     return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3001'}/auth/callback?token=${token}`);
   } catch (error) {
@@ -528,7 +541,6 @@ app.post('/api/repositories/:repositoryId/analyses', (_, res: Response) => {
 
 app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
   const { repositoryId } = req.params;
-  const { apiKey } = req.body;
   
   // Validate repository exists
   const repository = store.getRepositoryById(repositoryId);
@@ -555,14 +567,50 @@ app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
     // Save the analysis to the store
     store.createAnalysis(analysis);
     
+    // Get API key from environment variables
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.warn('OpenAI API key not configured. Using mock analysis.');
+      
+      // If no API key, provide mock analysis after a delay
+      setTimeout(() => {
+        store.updateAnalysis(analysisId, {
+          status: 'completed',
+          completedAt: new Date(),
+          results: [
+            {
+              id: uuidv4(),
+              title: 'Mock Analysis Result',
+              description: 'This is a mock result because no OpenAI API key is configured.',
+              severity: 'medium',
+              category: 'code_quality'
+            },
+            {
+              id: uuidv4(),
+              title: 'Configuration Needed',
+              description: 'To get real analysis results, please configure an OpenAI API key in the environment variables.',
+              severity: 'low',
+              category: 'best_practice'
+            }
+          ]
+        });
+      }, 3000);
+      
+      return res.status(200).json({
+        status: 'success',
+        analysisId,
+        message: 'No API key configured. Mock analysis will be performed.'
+      });
+    }
+    
     // Start analysis in background
     (async () => {
       try {
-        // Use OpenAI instead of Claude for analysis
+        // Use OpenAI for analysis
         console.log(`Starting code analysis with OpenAI for repository: ${repository.owner}/${repository.name}`);
         
         const analysisResults = await analyzeCodeWithOpenAI(
-          apiKey || process.env.OPENAI_API_KEY || '',
+          apiKey,
           repository
         );
         
