@@ -704,18 +704,17 @@ app.post('/api/analysis/:id', async (req, res) => {
         
         // Validate OpenAI API key
         let openaiApiKey = apiKey;
-        
-        // If not provided or placeholder, try environment variable
         if (!openaiApiKey || openaiApiKey.includes('placeholder')) {
           log('API key not provided or is a placeholder, using environment variable');
           openaiApiKey = process.env.OPENAI_API_KEY || '';
-        }
-        
-        if (!openaiApiKey) {
-          log('No OpenAI API key available', 'error');
-          const error = new Error('OpenAI API key is required');
-          updateAnalysisStatus(analysisId, 'failed', error.message);
-          return;
+          
+          // Log key presence without revealing the key itself
+          if (openaiApiKey) {
+            const maskedKey = openaiApiKey.substring(0, 7) + '...' + openaiApiKey.substring(openaiApiKey.length - 4);
+            log(`Using OpenAI API key from environment variable: ${maskedKey}`);
+          } else {
+            log('No OpenAI API key found in environment variables', 'error');
+          }
         }
         
         // Check if API key is in the correct format
@@ -737,61 +736,90 @@ app.post('/api/analysis/:id', async (req, res) => {
         
         log(`Code content size: ${Math.round(codeContent.length / 1024)} KB`);
         
-        // Create OpenAI client instance
-        const openai = new OpenAI({
-          apiKey: openaiApiKey.trim(),
-        });
-        
-        // Make request to OpenAI using the client library
-        const response = await openai.chat.completions.create({
-          model: 'gpt-4',
-          messages: [
-            {
-              role: 'system',
-              content: `You are a code analysis assistant. Analyze the following code and provide insightful feedback, 
-              suggestions for improvements, and identify potential bugs or vulnerabilities. 
-              Focus on the most important aspects of the code. Your response should be structured in JSON format with the following fields:
-              [
-                {
-                  "id": "unique-id",
-                  "title": "Brief title of the insight",
-                  "description": "Detailed explanation",
-                  "severity": "high/medium/low",
-                  "category": "bug/security/performance/maintainability"
-                }
-              ]`
-            },
-            {
-              role: 'user',
-              content: `Analyze this code repository:\n\n${codeContent}`
-            }
-          ],
-          temperature: 0.3,
-          max_tokens: 3000
-        });
-        
-        log('Received response from OpenAI API');
-        
-        // Parse the response and extract results
-        let results = [];
         try {
-          const content = response.choices[0].message.content;
-          results = JSON.parse(content);
-        } catch (parseError) {
-          log(`Error parsing OpenAI response: ${parseError.message}`, 'error');
-          results = [{
-            id: 'parse-error',
-            title: 'Error processing analysis results',
-            description: 'The analysis completed but the results could not be properly formatted.',
-            severity: 'low',
-            category: 'other'
-          }];
+          // Log the current env var directly (masked)
+          const directEnvKey = process.env.OPENAI_API_KEY || 'not set';
+          const maskedDirectKey = directEnvKey.substring(0, 7) + '...' + 
+                                (directEnvKey.length > 10 ? directEnvKey.substring(directEnvKey.length - 4) : '');
+          log(`Direct OpenAI API key from environment: ${maskedDirectKey}`);
+          
+          // Use the direct API approach with Axios since project keys might need special handling
+          log('Sending request to OpenAI API using direct approach');
+          
+          // Make request to OpenAI using axios directly
+          const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+            model: 'gpt-4',
+            messages: [
+              {
+                role: 'system',
+                content: `You are a code analysis assistant. Analyze the following code and provide insightful feedback, 
+                suggestions for improvements, and identify potential bugs or vulnerabilities. 
+                Focus on the most important aspects of the code. Your response should be structured in JSON format with the following fields:
+                [
+                  {
+                    "id": "unique-id",
+                    "title": "Brief title of the insight",
+                    "description": "Detailed explanation",
+                    "severity": "high/medium/low",
+                    "category": "bug/security/performance/maintainability"
+                  }
+                ]`
+              },
+              {
+                role: 'user',
+                content: `Analyze this code repository:\n\n${codeContent}`
+              }
+            ],
+            temperature: 0.3,
+            max_tokens: 3000
+          }, {
+            headers: {
+              'Authorization': `Bearer ${openaiApiKey.trim()}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          log('Received response from OpenAI API');
+          
+          // Parse the response and extract results
+          let results = [];
+          try {
+            const content = response.data.choices[0].message.content;
+            results = JSON.parse(content);
+          } catch (parseError) {
+            log(`Error parsing OpenAI response: ${parseError.message}`, 'error');
+            results = [{
+              id: 'parse-error',
+              title: 'Error processing analysis results',
+              description: 'The analysis completed but the results could not be properly formatted.',
+              severity: 'low',
+              category: 'other'
+            }];
+          }
+          
+          // Update analysis with results
+          updateAnalysisStatus(analysisId, 'completed', null, results);
+          log(`Analysis completed successfully with ${results.length} insights`);
+          
+        } catch (apiError) {
+          log(`OpenAI API error: ${apiError.message}`, 'error');
+          if (apiError.response) {
+            log(`Status: ${apiError.response.status}`, 'error');
+            log(`Data: ${JSON.stringify(apiError.response.data)}`, 'error');
+          }
+          
+          let errorMessage = 'Failed to analyze code with OpenAI';
+          
+          if (apiError.response && apiError.response.status === 401) {
+            errorMessage = 'Invalid OpenAI API key. Please provide a valid key in the format sk-...';
+          } else if (apiError.response && apiError.response.status === 429) {
+            errorMessage = 'OpenAI API rate limit exceeded';
+          } else if (apiError.message.includes('content size too large')) {
+            errorMessage = 'Code content too large for analysis';
+          }
+          
+          updateAnalysisStatus(analysisId, 'failed', errorMessage);
         }
-        
-        // Update analysis with results
-        updateAnalysisStatus(analysisId, 'completed', null, results);
-        log(`Analysis completed successfully with ${results.length} insights`);
-        
       } catch (error) {
         log(`Error during analysis: ${error.message}`, 'error');
         updateAnalysisStatus(analysisId, 'failed', error.message);
@@ -864,6 +892,36 @@ function updateAnalysisStatus(id, status, error = null, results = null) {
   
   log(`Updated analysis ${id} status to ${status}`);
 }
+
+// Debug endpoint to check environment variables (useful for Heroku debugging)
+app.get('/api/debug-env', (req, res) => {
+  log('Received request to debug environment variables');
+  
+  // Create a safe version of the environment that doesn't expose full secrets
+  const safeEnv = {};
+  Object.keys(process.env).forEach(key => {
+    if (key.includes('KEY') || key.includes('SECRET') || key.includes('TOKEN')) {
+      const value = process.env[key];
+      if (value && value.length > 10) {
+        safeEnv[key] = `${value.substring(0, 6)}...${value.substring(value.length - 4)}`;
+      } else if (value) {
+        safeEnv[key] = '[SET BUT TOO SHORT TO MASK]';
+      } else {
+        safeEnv[key] = '[NOT SET]';
+      }
+    } else {
+      safeEnv[key] = process.env[key];
+    }
+  });
+  
+  res.json({
+    environment: process.env.NODE_ENV || 'development',
+    openaiKeyFormat: process.env.OPENAI_API_KEY ? 
+      (process.env.OPENAI_API_KEY.startsWith('sk-proj-') ? 'project-based' : 
+       (process.env.OPENAI_API_KEY.startsWith('sk-') ? 'standard' : 'unknown')) : 'not set',
+    safeEnv
+  });
+});
 
 // Basic health check endpoint
 app.get('/api/health', (_, res) => {
