@@ -7,9 +7,11 @@ const router = Router();
 // In-memory storage for user sessions
 const userSessions = new Map<string, any>();
 
-router.get('/github', (_req, res) => {
+router.get('/github', (req, res) => {
   const clientId = process.env.GITHUB_CLIENT_ID;
-  const redirectUri = process.env.GITHUB_CALLBACK_URL;
+  // Get the origin from the request to determine callback URL dynamically
+  const origin = req.headers.origin || process.env.REACT_APP_CLIENT_URL;
+  const redirectUri = process.env.GITHUB_CALLBACK_URL || `${origin}/api/auth/github/callback`;
   const scope = 'repo read:user user:email';
   
   const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`;
@@ -18,8 +20,11 @@ router.get('/github', (_req, res) => {
 
 router.get('/github/callback', async (req, res) => {
   const { code } = req.query as { code: string };
+  // Get client URL from environment or request origin, with localhost fallback only for development
+  const clientUrl = process.env.REACT_APP_CLIENT_URL || req.headers.origin || 'http://localhost:3001';
+  
   if (!code) {
-    return res.redirect(`${process.env.REACT_APP_CLIENT_URL || 'http://localhost:3001'}/login?error=missing_code`);
+    return res.redirect(`${clientUrl}/login?error=missing_code`);
   }
 
   try {
@@ -39,7 +44,7 @@ router.get('/github/callback', async (req, res) => {
 
     const tokenData = await tokenResponse.json();
     if (tokenData.error) {
-      return res.redirect(`${process.env.REACT_APP_CLIENT_URL || 'http://localhost:3001'}/login?error=${tokenData.error}`);
+      return res.redirect(`${clientUrl}/login?error=${tokenData.error}`);
     }
 
     // Get user data from GitHub
@@ -51,7 +56,7 @@ router.get('/github/callback', async (req, res) => {
 
     const userData = await userResponse.json();
     if (userResponse.status !== 200) {
-      return res.redirect(`${process.env.REACT_APP_CLIENT_URL || 'http://localhost:3001'}/login?error=github_api_error`);
+      return res.redirect(`${clientUrl}/login?error=github_api_error`);
     }
 
     // Create session
@@ -73,10 +78,10 @@ router.get('/github/callback', async (req, res) => {
     );
 
     // Redirect back to the client with the token
-    return res.redirect(`${process.env.REACT_APP_CLIENT_URL || 'http://localhost:3001'}/auth/callback?token=${token}`);
+    return res.redirect(`${clientUrl}/auth/callback?token=${token}`);
   } catch (error) {
     console.error('Authentication error:', error);
-    return res.redirect(`${process.env.REACT_APP_CLIENT_URL || 'http://localhost:3001'}/login?error=server_error`);
+    return res.redirect(`${clientUrl}/login?error=server_error`);
   }
 });
 

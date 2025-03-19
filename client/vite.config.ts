@@ -18,7 +18,7 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       proxy: isProd ? undefined : {
         '/api': {
-          target: 'http://localhost:3030',
+          target: process.env.API_URL || 'http://localhost:3030',
           changeOrigin: true,
         },
       },

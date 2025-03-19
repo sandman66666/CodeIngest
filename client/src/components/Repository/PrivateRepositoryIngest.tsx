@@ -27,7 +27,7 @@ import { RepositoryIngestionPreview } from './RepositoryIngestionPreview';
 interface User {
   id: string;
   githubId: number;
-  username: string;
+  login: string;
   name?: string | null;
   email?: string | null;
   avatarUrl?: string;
@@ -92,7 +92,8 @@ export function PrivateRepositoryIngest() {
     
     try {
       addLog('Authenticating with GitHub...');
-      const response = await axios.post('http://localhost:3000/api/private-repositories', 
+      const baseUrl = window.location.origin;
+      const response = await axios.post(`${baseUrl}/api/private-repositories`, 
         { url: repoUrl },
         { 
           headers: { 
@@ -210,7 +211,7 @@ export function PrivateRepositoryIngest() {
             </HStack>
             
             <Text color="gray.500">
-              You're signed in as <strong>{user && user.username}</strong>. You can now analyze private repositories you have access to.
+              You're signed in as <strong>{user && user.login}</strong>. You can now analyze private repositories you have access to.
             </Text>
             
             <Alert status="info" borderRadius="md">
