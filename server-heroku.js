@@ -718,8 +718,8 @@ app.post('/api/analysis/:id', async (req, res) => {
         }
         
         // Check if API key is in the correct format
-        if (!openaiApiKey.startsWith('sk-')) {
-          log('Provided API key does not start with "sk-", may not be valid', 'warn');
+        if (!openaiApiKey.startsWith('sk-') && !openaiApiKey.startsWith('sk-proj-')) {
+          log('Provided API key does not start with "sk-" or "sk-proj-", may not be valid', 'warn');
         }
         
         log('Preparing code for analysis');
@@ -771,7 +771,7 @@ app.post('/api/analysis/:id', async (req, res) => {
             max_tokens: 3000
           }, {
             headers: {
-              'Authorization': `Bearer ${openaiApiKey}`,
+              'Authorization': `Bearer ${openaiApiKey.trim()}`,
               'Content-Type': 'application/json'
             }
           });
