@@ -655,6 +655,242 @@ app.get('/api/repositories/:id', (req, res) => {
   return res.json({ repository });
 });
 
+// Analysis endpoint for handling OpenAI analysis
+app.post('/api/analysis/:id', async (req, res) => {
+  try {
+    log(`POST request to /api/analysis/${req.params.id}`);
+    const { id } = req.params;
+    const { apiKey } = req.body;
+    
+    // Get repository from memory or the global repositories object
+    let repository = store.getRepositoryById(id);
+    if (!repository && global.repositories && global.repositories[id]) {
+      repository = global.repositories[id];
+    }
+    
+    if (!repository) {
+      log(`Repository with ID ${id} not found`, 'error');
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+    
+    log(`Found repository: ${repository.owner}/${repository.name}`);
+    
+    // Create an analysis entry
+    const analysisId = uuidv4();
+    const analysis = {
+      id: analysisId,
+      repositoryId: id,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      results: []
+    };
+    
+    // Add to store
+    if (store) {
+      store.addAnalysis(analysis);
+    }
+    
+    // If not using the store, use a global object
+    if (!global.analyses) {
+      global.analyses = {};
+    }
+    global.analyses[analysisId] = analysis;
+    
+    // Process the analysis asynchronously
+    (async () => {
+      try {
+        log(`Starting analysis for repository ${id}`);
+        
+        // Validate OpenAI API key
+        let openaiApiKey = apiKey;
+        
+        // If not provided or placeholder, try environment variable
+        if (!openaiApiKey || openaiApiKey.includes('placeholder')) {
+          log('API key not provided or is a placeholder, using environment variable');
+          openaiApiKey = process.env.OPENAI_API_KEY || '';
+        }
+        
+        if (!openaiApiKey) {
+          log('No OpenAI API key available', 'error');
+          const error = new Error('OpenAI API key is required');
+          updateAnalysisStatus(analysisId, 'failed', error.message);
+          return;
+        }
+        
+        // Check if API key is in the correct format
+        if (!openaiApiKey.startsWith('sk-')) {
+          log('Provided API key does not start with "sk-", may not be valid', 'warn');
+        }
+        
+        log('Preparing code for analysis');
+        
+        // Extract code content from repository
+        const codeContent = repository.ingestedContent?.fullCode || '';
+        
+        if (!codeContent) {
+          const error = new Error('No code content available for analysis');
+          log(error.message, 'error');
+          updateAnalysisStatus(analysisId, 'failed', error.message);
+          return;
+        }
+        
+        log(`Code content size: ${Math.round(codeContent.length / 1024)} KB`);
+        
+        // Make request to OpenAI API
+        log('Sending request to OpenAI API');
+        
+        try {
+          // Set the OpenAI API key in environment
+          process.env.OPENAI_API_KEY = openaiApiKey;
+          
+          // Make request to OpenAI
+          const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+            model: 'gpt-4',
+            messages: [
+              {
+                role: 'system',
+                content: `You are a code analysis assistant. Analyze the following code and provide insightful feedback, 
+                suggestions for improvements, and identify potential bugs or vulnerabilities. 
+                Focus on the most important aspects of the code. Your response should be structured in JSON format with the following fields:
+                [
+                  {
+                    "id": "unique-id",
+                    "title": "Brief title of the insight",
+                    "description": "Detailed explanation",
+                    "severity": "high/medium/low",
+                    "category": "bug/security/performance/maintainability"
+                  }
+                ]`
+              },
+              {
+                role: 'user',
+                content: `Analyze this code repository:\n\n${codeContent}`
+              }
+            ],
+            temperature: 0.3,
+            max_tokens: 3000
+          }, {
+            headers: {
+              'Authorization': `Bearer ${openaiApiKey}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          log('Received response from OpenAI API');
+          
+          // Parse the response and extract results
+          let results = [];
+          try {
+            const content = response.data.choices[0].message.content;
+            results = JSON.parse(content);
+          } catch (parseError) {
+            log(`Error parsing OpenAI response: ${parseError.message}`, 'error');
+            results = [{
+              id: 'parse-error',
+              title: 'Error processing analysis results',
+              description: 'The analysis completed but the results could not be properly formatted.',
+              severity: 'low',
+              category: 'other'
+            }];
+          }
+          
+          // Update analysis with results
+          updateAnalysisStatus(analysisId, 'completed', null, results);
+          log(`Analysis completed successfully with ${results.length} insights`);
+          
+        } catch (apiError) {
+          log(`OpenAI API error: ${apiError.message}`, 'error');
+          if (apiError.response) {
+            log(`Status: ${apiError.response.status}`, 'error');
+            log(`Data: ${JSON.stringify(apiError.response.data)}`, 'error');
+          }
+          
+          let errorMessage = 'Failed to analyze code with OpenAI';
+          
+          if (apiError.response && apiError.response.status === 401) {
+            errorMessage = 'Invalid OpenAI API key';
+          } else if (apiError.response && apiError.response.status === 429) {
+            errorMessage = 'OpenAI API rate limit exceeded';
+          } else if (apiError.message.includes('content size too large')) {
+            errorMessage = 'Code content too large for analysis';
+          }
+          
+          updateAnalysisStatus(analysisId, 'failed', errorMessage);
+        }
+        
+      } catch (error) {
+        log(`Error during analysis: ${error.message}`, 'error');
+        updateAnalysisStatus(analysisId, 'failed', error.message);
+      }
+    })();
+    
+    return res.json({ analysisId });
+    
+  } catch (error) {
+    log(`Unexpected error in /api/analysis: ${error.message}`, 'error');
+    return res.status(500).json({ error: 'Failed to process analysis request' });
+  }
+});
+
+// Get analysis results endpoint
+app.get('/api/analysis/:id', async (req, res) => {
+  try {
+    log(`GET request to /api/analysis/${req.params.id}`);
+    const { id } = req.params;
+    
+    // Check for analysis in store or global object
+    let analysis = store.getAnalysisById(id);
+    if (!analysis && global.analyses && global.analyses[id]) {
+      analysis = global.analyses[id];
+    }
+    
+    if (!analysis) {
+      log(`Analysis with ID ${id} not found`, 'error');
+      return res.status(404).json({ error: 'Analysis not found' });
+    }
+    
+    // Get repository details
+    let repository = null;
+    if (analysis.repositoryId) {
+      repository = store.getRepositoryById(analysis.repositoryId);
+      if (!repository && global.repositories && global.repositories[analysis.repositoryId]) {
+        repository = global.repositories[analysis.repositoryId];
+      }
+    }
+    
+    return res.json({ 
+      analysis,
+      repository
+    });
+    
+  } catch (error) {
+    log(`Error retrieving analysis: ${error.message}`, 'error');
+    return res.status(500).json({ error: 'Failed to retrieve analysis results' });
+  }
+});
+
+// Helper function to update analysis status
+function updateAnalysisStatus(id, status, error = null, results = null) {
+  const updates = { 
+    status,
+    ...(error && { error }),
+    ...(status === 'completed' && { completedAt: new Date().toISOString() }),
+    ...(results && { results })
+  };
+  
+  // Update in store if available
+  if (store) {
+    store.updateAnalysis(id, updates);
+  }
+  
+  // Update in global object if available
+  if (global.analyses && global.analyses[id]) {
+    global.analyses[id] = { ...global.analyses[id], ...updates };
+  }
+  
+  log(`Updated analysis ${id} status to ${status}`);
+}
+
 // Basic health check endpoint
 app.get('/api/health', (_, res) => {
   return res.json({ 

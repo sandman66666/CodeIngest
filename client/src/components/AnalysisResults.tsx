@@ -72,7 +72,7 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ analysisId }) => {
 
   const fetchAnalysis = useCallback(async () => {
     try {
-      const response = await axios.get(`http://localhost:3030/api/analysis/${analysisId}`);
+      const response = await axios.get(`/api/analysis/${analysisId}`);
       setAnalysis(response.data.analysis);
       setRepository(response.data.repository);
       setError(null);
