@@ -349,7 +349,7 @@ app.post('/api/public-repositories', async (req, res) => {
         url,
         owner: repoOwner,
         repo: normalizedRepoName,
-        name: repoDetails.name,
+        name: normalizedRepoName,
         fullName: repoDetails.full_name,
         description: repoDetails.description || '',
         defaultBranch: branch,
@@ -380,7 +380,11 @@ app.post('/api/public-repositories', async (req, res) => {
         })}`);
       }
       
-      return res.json(repository);
+      // Return the repository wrapped in an object as expected by the frontend
+      return res.json({ 
+        repository: repository,
+        analysisId: null
+      });
     } catch (error) {
       log(`Error fetching repository information: ${error.message}`, 'error');
       if (error.response && error.response.status) {
