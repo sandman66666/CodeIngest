@@ -24,7 +24,7 @@ const sessions: Record<string, any> = {};
 // Environment information
 const environment = process.env.NODE_ENV || 'development';
 const githubOAuthConfigured = process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET;
-const claudeApiConfigured = process.env.ANTHROPIC_API_KEY;
+const openaiApiConfigured = process.env.OPENAI_API_KEY;
 
 // Configure middleware
 app.use(cors());
@@ -80,7 +80,7 @@ app.get('/api/auth/github', (_, res: Response) => {
 app.get('/api/auth/github/callback', async (req: Request, res: Response) => {
   const { code } = req.query as { code: string };
   if (!code) {
-    return res.redirect(`http://localhost:3001/login?error=missing_code`);
+    return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3001'}/login?error=missing_code`);
   }
 
   try {
@@ -97,7 +97,7 @@ app.get('/api/auth/github/callback', async (req: Request, res: Response) => {
 
     const tokenData = tokenResponse.data;
     if (tokenData.error) {
-      return res.redirect(`http://localhost:3001/login?error=${tokenData.error}`);
+      return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3001'}/login?error=${tokenData.error}`);
     }
 
     // Get user data from GitHub
@@ -109,7 +109,7 @@ app.get('/api/auth/github/callback', async (req: Request, res: Response) => {
 
     const userData = userResponse.data;
     if (!userData) {
-      return res.redirect(`http://localhost:3001/login?error=github_api_error`);
+      return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3001'}/login?error=github_api_error`);
     }
 
     // Create session
@@ -131,10 +131,10 @@ app.get('/api/auth/github/callback', async (req: Request, res: Response) => {
     );
 
     // Redirect back to the client with the token
-    return res.redirect(`http://localhost:3001/auth/callback?token=${token}`);
+    return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3001'}/auth/callback?token=${token}`);
   } catch (error) {
     console.error('Authentication error:', error);
-    return res.redirect(`http://localhost:3001/login?error=server_error`);
+    return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3001'}/login?error=server_error`);
   }
 });
 
@@ -526,9 +526,9 @@ app.post('/api/repositories/:repositoryId/analyses', (_, res: Response) => {
   return;
 });
 
-app.post('/api/analysis/:repositoryId', async (_, res: Response) => {
-  const { repositoryId } = _.params;
-  const { apiKey } = _.body;
+app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
+  const { repositoryId } = req.params;
+  const { apiKey } = req.body;
   
   // Validate repository exists
   const repository = store.getRepositoryById(repositoryId);
@@ -536,34 +536,14 @@ app.post('/api/analysis/:repositoryId', async (_, res: Response) => {
     return res.status(404).json({ error: 'Repository not found' });
   }
   
-  // Log received API key format (partially masked for security)
-  if (apiKey) {
-    const maskedKey = apiKey.substring(0, 7) + '...' + (apiKey.length > 10 ? apiKey.substring(apiKey.length - 3) : '');
-    console.log(`Received API key format: ${maskedKey}`);
-  } else {
-    console.log('No API key provided in request');
-  }
-  
-  // Check for a valid API key - first try request body, then environment variable
-  let openaiApiKey = apiKey;
-  
-  // If no API key in request, or it's a placeholder, try to use the one from environment
-  if (!openaiApiKey || openaiApiKey.includes('placeholder')) {
-    console.log('Using API key from environment variable');
-    openaiApiKey = process.env.OPENAI_API_KEY || '';
-    
-    if (!openaiApiKey) {
-      return res.status(400).json({ 
-        error: 'No valid API key provided and no API key found in environment variables',
-        details: 'Please provide a valid OpenAI API key or set the OPENAI_API_KEY environment variable'
-      });
-    }
+  if (!repository.ingestedContent?.fullCode) {
+    return res.status(400).json({ error: 'Repository content not found. Please ingest the repository first.' });
   }
   
   try {
-    // Create a new analysis
-    const analysisId = `analysis-${uuidv4()}`;
-    const newAnalysis: Analysis = {
+    // Create a new analysis record
+    const analysisId = uuidv4();
+    const analysis: Analysis = {
       id: analysisId,
       repositoryId,
       status: 'pending',
@@ -572,59 +552,45 @@ app.post('/api/analysis/:repositoryId', async (_, res: Response) => {
       results: null
     };
     
-    store.createAnalysis(newAnalysis);
+    // Save the analysis to the store
+    store.createAnalysis(analysis);
     
-    // Send the initial response with the analysis ID
-    res.status(202).json({
-      message: 'Analysis started',
+    // Start analysis in background
+    (async () => {
+      try {
+        // Use OpenAI instead of Claude for analysis
+        console.log(`Starting code analysis with OpenAI for repository: ${repository.owner}/${repository.name}`);
+        
+        const analysisResults = await analyzeCodeWithOpenAI(
+          apiKey || process.env.OPENAI_API_KEY || '',
+          repository
+        );
+        
+        // Update the analysis with the results
+        store.updateAnalysis(analysisId, {
+          status: 'completed',
+          completedAt: new Date(),
+          results: analysisResults.insights
+        });
+        
+        console.log(`Analysis completed for repository: ${repository.owner}/${repository.name}`);
+      } catch (error) {
+        console.error('Analysis error:', error);
+        store.updateAnalysis(analysisId, {
+          status: 'failed',
+          completedAt: new Date(),
+          results: null
+        });
+      }
+    })();
+    
+    return res.status(200).json({
+      status: 'success',
       analysisId
     });
-    
-    try {
-      console.log("Sending request to OpenAI API...");
-      
-      // Use OpenAI instead of Claude for analysis
-      const analysisResults = await analyzeCodeWithOpenAI(
-        openaiApiKey,
-        repository
-      );
-
-      // Update analysis with results
-      const updatedAnalysis: Partial<Analysis> = {
-        status: 'completed',
-        completedAt: new Date(),
-        results: analysisResults.insights.map(insight => ({
-          id: `result-${uuidv4()}`,
-          title: insight.title,
-          description: insight.description,
-          severity: insight.severity as 'low' | 'medium' | 'high',
-          category: insight.category
-        }))
-      };
-      
-      store.updateAnalysis(analysisId, updatedAnalysis);
-      console.log(`Analysis ${analysisId} for repository ${repository.owner}/${repository.name} completed successfully`);
-      return res.status(200).json({ message: 'Analysis completed successfully' }); // Return statement added here
-    } catch (error) {
-      console.error("Error in code analysis:", error);
-      
-      // Update analysis with error status
-      store.updateAnalysis(analysisId, {
-        status: 'failed',
-        completedAt: new Date(),
-        results: [{
-          id: `error-${uuidv4()}`,
-          title: 'Analysis Error',
-          description: `Failed to analyze code: ${error instanceof Error ? error.message : String(error)}`,
-          severity: 'high',
-          category: 'error'
-        }]
-      });
-      return res.status(500).json({ error: 'Analysis failed' }); // Return statement added here
-    }
   } catch (error) {
-    console.error("Error initiating analysis:", error);
-    return res.status(500).json({ error: 'Failed to initiate analysis' });
+    console.error('Error starting analysis:', error);
+    return res.status(500).json({ error: 'Failed to start analysis' });
   }
 });
 
@@ -680,7 +646,7 @@ app.use('/api/private-repositories', privateRepositoriesRouter);
 app.listen(port, () => {
   console.log(`Server running on port ${port} in ${environment} mode with in-memory storage`);
   console.log(`GitHub OAuth configured: ${githubOAuthConfigured ? 'Yes' : 'No'}`);
-  console.log(`Claude API configured: ${claudeApiConfigured ? 'Yes' : 'No'}`);
+  console.log(`OpenAI API configured: ${openaiApiConfigured ? 'Yes' : 'No'}`);
   
   if (environment === 'production') {
     console.log(`Server available at your app's URL`);

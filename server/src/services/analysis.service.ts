@@ -1,16 +1,40 @@
-import { ApiException } from '@codeinsight/common';
-import { AnalysisModel } from '../models/analysis.model';
+import { Analysis } from '../models/analysis.model';
 import { RepositoryService } from './repository.service';
-import { ClaudeService } from './claude.service';
+import { analyzeCodeWithOpenAI } from './openai-service';
 import logger from '../config/logger';
+
+// Custom API exception class
+class ApiException extends Error {
+  statusCode: number;
+  
+  constructor(type: string, message: string) {
+    super(message);
+    this.name = 'ApiException';
+    
+    // Map error types to status codes
+    switch(type) {
+      case 'NOT_FOUND': 
+        this.statusCode = 404;
+        break;
+      case 'UNAUTHORIZED':
+        this.statusCode = 401;
+        break;
+      case 'FORBIDDEN':
+        this.statusCode = 403;
+        break;
+      case 'INTERNAL_SERVER_ERROR':
+      default:
+        this.statusCode = 500;
+        break;
+    }
+  }
+}
 
 export class AnalysisService {
   private repositoryService: RepositoryService;
-  private claudeService: ClaudeService;
 
   constructor() {
     this.repositoryService = new RepositoryService();
-    this.claudeService = new ClaudeService();
   }
 
   async startAnalysis(userId: string, repoId: string) {
@@ -19,7 +43,7 @@ export class AnalysisService {
       const repository = await this.repositoryService.getRepository(userId, repoId);
 
       // Create initial analysis record
-      const analysis = await AnalysisModel.create({
+      const analysis = await Analysis.create({
         userId,
         repositoryId: repoId,
         status: 'pending',
@@ -50,55 +74,49 @@ export class AnalysisService {
   private async processAnalysis(analysisId: string, userId: string, repository: any) {
     try {
       // Update status to processing
-      await AnalysisModel.findByIdAndUpdate(analysisId, {
+      await Analysis.findByIdAndUpdate(analysisId, {
         status: 'processing',
       });
 
       // Get repository content
       const files = await this.getRepositoryFiles(userId, repository._id);
+      
+      // Check if there's an OpenAI API key in environment variables
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        throw new Error('OpenAI API key not found in environment variables');
+      }
 
-      // Generate project specification
-      const specifications = await this.claudeService.generateSpecification(
-        files,
-        {
-          repoName: repository.name,
-          owner: repository.owner,
-          description: repository.description,
+      // Prepare repository data for OpenAI analysis
+      const repoData = {
+        id: repository._id.toString(),
+        name: repository.name,
+        owner: repository.owner,
+        ingestedContent: {
+          fullCode: files.map(file => `File: ${file.path}\n\n${file.content}`).join('\n\n'),
+          fileCount: files.length,
+          sizeInBytes: files.reduce((total, file) => total + file.content.length, 0)
         }
-      );
+      };
 
-      // Analyze each file
-      const analysisResults = await Promise.all(
-        files.map((file) =>
-          this.claudeService.analyzeCode(file.content, {
-            repoName: repository.name,
-            owner: repository.owner,
-            path: file.path,
-            language: this.detectLanguage(file.path),
-          })
-        )
-      );
-
-      // Combine all insights and vulnerabilities
-      const combinedResults = analysisResults.reduce(
-        (acc, result) => ({
-          insights: [...acc.insights, ...result.insights],
-          vulnerabilities: [...acc.vulnerabilities, ...result.vulnerabilities],
-        }),
-        { insights: [], vulnerabilities: [] }
-      );
+      // Generate analysis using OpenAI
+      const analysisResults = await analyzeCodeWithOpenAI(apiKey, repoData);
 
       // Update analysis with results
-      await AnalysisModel.findByIdAndUpdate(analysisId, {
+      await Analysis.findByIdAndUpdate(analysisId, {
         status: 'completed',
-        insights: combinedResults.insights,
-        vulnerabilities: combinedResults.vulnerabilities,
-        specifications,
+        insights: analysisResults.insights,
+        specifications: {
+          overview: 'Generated with OpenAI analysis',
+          architecture: '',
+          components: [],
+        },
       });
     } catch (error) {
       logger.error('Analysis processing failed:', error);
-      await AnalysisModel.findByIdAndUpdate(analysisId, {
+      await Analysis.findByIdAndUpdate(analysisId, {
         status: 'failed',
+        error: error instanceof Error ? error.message : String(error)
       });
     }
   }
@@ -143,35 +161,9 @@ export class AnalysisService {
     return files;
   }
 
-  private detectLanguage(filePath: string): string | undefined {
-    const extensions: Record<string, string> = {
-      '.js': 'JavaScript',
-      '.ts': 'TypeScript',
-      '.py': 'Python',
-      '.java': 'Java',
-      '.rb': 'Ruby',
-      '.php': 'PHP',
-      '.go': 'Go',
-      '.rs': 'Rust',
-      '.cpp': 'C++',
-      '.c': 'C',
-      '.cs': 'C#',
-      '.html': 'HTML',
-      '.css': 'CSS',
-      '.scss': 'SCSS',
-      '.json': 'JSON',
-      '.md': 'Markdown',
-      '.yaml': 'YAML',
-      '.yml': 'YAML',
-    };
-
-    const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase();
-    return extensions[ext];
-  }
-
   async getAnalysis(userId: string, analysisId: string) {
     try {
-      const analysis = await AnalysisModel.findOne({
+      const analysis = await Analysis.findOne({
         _id: analysisId,
         userId,
       });
@@ -198,19 +190,19 @@ export class AnalysisService {
       const skip = (page - 1) * limit;
 
       const [analyses, total] = await Promise.all([
-        AnalysisModel.find({ userId })
+        Analysis.find({ userId })
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit),
-        AnalysisModel.countDocuments({ userId }),
+        Analysis.countDocuments({ userId }),
       ]);
 
       return {
         analyses,
         pagination: {
+          total,
           page,
           limit,
-          total,
           pages: Math.ceil(total / limit),
         },
       };
@@ -225,7 +217,7 @@ export class AnalysisService {
 
   async deleteAnalysis(userId: string, analysisId: string) {
     try {
-      const result = await AnalysisModel.deleteOne({
+      const result = await Analysis.deleteOne({
         _id: analysisId,
         userId,
       });

@@ -129,7 +129,7 @@ const AnalysisResults: React.FC<AnalysisResultsProps> = ({ analysisId }) => {
               <Box>
                 <AlertTitle>Analysis in progress</AlertTitle>
                 <AlertDescription>
-                  Your code is being analyzed by Claude. This may take a few minutes depending on the size of the repository.
+                  Your code is being analyzed by OpenAI. This may take a few minutes depending on the size of the repository.
                 </AlertDescription>
               </Box>
             </Alert>

@@ -294,7 +294,7 @@ export function PublicRepositoryIngest() {
                 <Box>
                   <AlertTitle>Analysis in progress</AlertTitle>
                   <AlertDescription>
-                    Your code is being analyzed using Claude API. This may take a few moments.
+                    Your code is being analyzed using OpenAI API. This may take a few moments.
                     <Button 
                       as="a" 
                       href={`/analysis/${analysisId}`} 
