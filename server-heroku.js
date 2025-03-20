@@ -7,7 +7,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
-const { Client } = require('@anthropic-ai/sdk');
+const Anthropic = require('@anthropic-ai/sdk');
 
 // Logging setup
 function log(message, level = 'info') {
@@ -920,7 +920,7 @@ app.post('/api/analysis/:id', async (req, res) => {
           log('Sending request to Anthropic API using direct approach');
           
           // Make request to Anthropic using axios directly
-          const client = new Client({apiKey: anthropicApiKey.trim()});
+          const client = new Anthropic.Client({apiKey: anthropicApiKey.trim()});
           const response = await client.messages.create({
             model: 'claude-3-5-sonnet-20240620',
             messages: [
@@ -1110,3 +1110,4 @@ app.listen(port, () => {
   log(`GitHub OAuth: ${process.env.GITHUB_CLIENT_ID ? 'Configured' : 'Not configured'}`);
   log(`Anthropic API: ${process.env.ANTHROPIC_API_KEY ? 'Configured' : 'Not configured'}`);
 });
+// Modified for Heroku deployment Thu Mar 20 22:38:48 IST 2025
