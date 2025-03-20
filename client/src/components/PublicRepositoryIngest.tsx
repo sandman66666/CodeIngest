@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import { apiClient } from '../lib/api';
 import {
   Box,
   Button,
@@ -63,6 +64,7 @@ export function PublicRepositoryIngest() {
     setError(null);
 
     try {
+      // Use axios directly as there's no specific API client method for public repositories
       const response = await axios.post('/api/public-repositories', {
         url: repoUrl
       });
@@ -71,7 +73,6 @@ export function PublicRepositoryIngest() {
         setIngestionResult(result);
         setIsLoading(false);
         console.log('Ingestion success result:', result);  // Debug log to see structure
-        
         // Show success message
         toast({
           title: 'Repository Ingested',
@@ -119,10 +120,10 @@ export function PublicRepositoryIngest() {
       setIsLoading(true);
       setAnalysisStarted(true);
       
-      // Call the analysis endpoint - server will use its environment variable for API key
-      const response = await axios.post(`/api/analysis/${ingestionResult.repository.id}`);
+      // Use the API client instead of direct axios calls
+      const response = await apiClient.analysis.start(ingestionResult.repository.id);
       
-      setAnalysisId(response.data.analysisId);
+      setAnalysisId(response.analysisId);
       
       toast({
         title: 'Analysis started',
@@ -135,7 +136,7 @@ export function PublicRepositoryIngest() {
       // Wait a moment to show the user that the analysis has started
       setTimeout(() => {
         // Navigate to analysis page
-        window.location.href = `/analysis/${response.data.analysisId}`;
+        window.location.href = `/analysis/${response.analysisId}`;
       }, 1500);
       
     } catch (error: any) {
