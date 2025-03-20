@@ -950,14 +950,19 @@ app.post('/api/analysis/:id', async (req, res) => {
           });
           
           log('Received response from Anthropic API');
+          log(`Anthropic response structure: ${JSON.stringify(Object.keys(response))}`);
           
           // Parse the response and extract results
           let results = [];
           try {
+            // The Anthropic SDK returns the content differently than OpenAI
+            // It should be accessed via the content property of the first message
             const content = response.content[0].text;
+            log(`Extracted content: ${content.substring(0, 100)}...`);
             results = JSON.parse(content);
           } catch (parseError) {
             log(`Error parsing Anthropic response: ${parseError.message}`, 'error');
+            log(`Full response: ${JSON.stringify(response)}`, 'error');
             results = [{
               id: 'parse-error',
               title: 'Error processing analysis results',
@@ -1110,4 +1115,4 @@ app.listen(port, () => {
   log(`GitHub OAuth: ${process.env.GITHUB_CLIENT_ID ? 'Configured' : 'Not configured'}`);
   log(`Anthropic API: ${process.env.ANTHROPIC_API_KEY ? 'Configured' : 'Not configured'}`);
 });
-// Modified for Heroku deployment Thu Mar 20 22:38:48 IST 2025
+// Modified for Heroku deployment Thu Mar 20 22:45:05 IST 2025
