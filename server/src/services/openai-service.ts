@@ -194,20 +194,24 @@ Provide a specification with the following structure:
       // Get repository content and handle token limit
       const fullCode = repository.ingestedContent?.fullCode || 'No code available';
       
-      // Limit code size to approximately 150K tokens (rough estimate)
+      // Much stricter limit - approximately 30K tokens (rough estimate)
       // Assuming ~4 chars per token on average
-      const MAX_CHARS = 600000;
-      const truncatedCode = fullCode.length > MAX_CHARS 
-        ? fullCode.substring(0, MAX_CHARS) + `\n\n... [Content truncated: ${((fullCode.length - MAX_CHARS) / 1000).toFixed(0)}K characters removed due to token limit] ...\n`
-        : fullCode;
+      const MAX_CHARS = 120000; // Reduced from 600000
       
-      console.log(`Code size: Original ${(fullCode.length / 1000).toFixed(0)}K chars, Truncated to ${(truncatedCode.length / 1000).toFixed(0)}K chars`);
+      // If code is too large, process it in chunks
+      if (fullCode.length > MAX_CHARS) {
+        console.log(`Large codebase detected: ${(fullCode.length / 1000).toFixed(0)}K chars. Processing in chunks.`);
+        return await this.analyzeCodeInChunks(fullCode, repository);
+      }
       
-      // Call OpenAI API
+      // For smaller codebases, process normally
+      console.log(`Code size: ${(fullCode.length / 1000).toFixed(0)}K chars, within limit`);
+      
+      // Call OpenAI API - use gpt-3.5-turbo for better rate limits
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: 'gpt-3.5-turbo',  // Using a smaller model for faster response
+          model: 'gpt-3.5-turbo',  // Using a smaller model for better rate limits
           messages: [
             {
               role: 'system',
@@ -217,7 +221,7 @@ Provide a specification with the following structure:
               role: 'user',
               content: `Analyze this code from repository ${repository.owner}/${repository.name}:
 
-${truncatedCode}
+${fullCode}
 
 Provide analysis in JSON format with an array called "insights" containing objects with these fields:
 - "title": Brief title of the issue
@@ -300,11 +304,220 @@ Identify at least 5-7 important insights.`
       if (error.response?.status === 401) {
         throw new Error('Authentication error: Invalid OpenAI API key');
       } else if (error.response?.status === 429) {
-        throw new Error('Rate limit exceeded: Too many requests to the OpenAI API');
+        throw new Error('Rate limit exceeded: Too many requests or token limit exceeded. Try with a smaller repository.');
       } else {
         throw new Error(`OpenAI API error: ${error.message || 'Unknown error'}`);
       }
     }
+  }
+  
+  /**
+   * Process large codebases by breaking them into manageable chunks
+   * and aggregating the results
+   */
+  private async analyzeCodeInChunks(
+    fullCode: string, 
+    repository: Repository
+  ): Promise<{ insights: Array<{ title: string; description: string; severity: string; category: string }> }> {
+    const CHUNK_SIZE = 100000; // ~25K tokens per chunk
+    const allInsights: Array<{ title: string; description: string; severity: string; category: string }> = [];
+    
+    // Split by file boundaries if possible (using file separator patterns)
+    const fileSeparators = [
+      /\n={20,}\nFile: .+\n={20,}\n/g,  // Standard file separator
+      /\n-{20,}\nFile: .+\n-{20,}\n/g,   // Alternative separator
+      /\n\/\/ FILE: .+\n/g,               // Comment separator
+      /\n\/\* FILE: .+ \*\/\n/g           // Block comment separator
+    ];
+    
+    let fileChunks: string[] = [];
+    
+    // Try to split by file separators
+    for (const separator of fileSeparators) {
+      const parts = fullCode.split(separator);
+      if (parts.length > 1) {
+        console.log(`Split code into ${parts.length} file chunks`);
+        fileChunks = parts;
+        break;
+      }
+    }
+    
+    // If no file separators found, split by character count
+    if (fileChunks.length === 0) {
+      console.log('No file separators found, splitting by character count');
+      fileChunks = [];
+      let i = 0;
+      while (i < fullCode.length) {
+        // Find a reasonable breakpoint (newline) near the chunk size
+        let endIndex = Math.min(i + CHUNK_SIZE, fullCode.length);
+        if (endIndex < fullCode.length) {
+          const nextNewline = fullCode.indexOf('\n', endIndex);
+          if (nextNewline !== -1 && nextNewline - endIndex < 1000) {
+            endIndex = nextNewline;
+          }
+        }
+        fileChunks.push(fullCode.substring(i, endIndex));
+        i = endIndex;
+      }
+      console.log(`Split code into ${fileChunks.length} character chunks`);
+    }
+    
+    // Process each chunk with a delay to avoid rate limits
+    console.log(`Processing ${fileChunks.length} chunks`);
+    for (let i = 0; i < fileChunks.length; i++) {
+      try {
+        console.log(`Processing chunk ${i+1}/${fileChunks.length}`);
+        
+        // Add context about which part of the code this is
+        const chunkPrefix = `CHUNK ${i+1} OF ${fileChunks.length} FROM REPOSITORY ${repository.owner}/${repository.name}\n\n`;
+        const chunkContent = chunkPrefix + fileChunks[i];
+        
+        // Call OpenAI API for this chunk
+        const response = await axios.post(
+          'https://api.openai.com/v1/chat/completions',
+          {
+            model: 'gpt-3.5-turbo',
+            messages: [
+              {
+                role: 'system',
+                content: `You are analyzing a PORTION of a larger codebase. Focus on code quality and architecture insights for just this section.`
+              },
+              {
+                role: 'user',
+                content: `Analyze this code chunk (${i+1} of ${fileChunks.length}) from repository ${repository.owner}/${repository.name}:
+
+${chunkContent}
+
+Provide 2-3 insights in JSON format with an array called "insights" containing objects with:
+- "title": Brief title of the issue
+- "description": Detailed explanation
+- "severity": "low", "medium", or "high"
+- "category": One of: "bug", "security", "performance", "architecture", "best_practice", "code_quality"
+
+Return valid JSON only.`
+              }
+            ],
+            temperature: 0.3,
+            max_tokens: 1000
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${this.apiKey}`
+            }
+          }
+        );
+        
+        // Parse response
+        const analysisText = response.data.choices[0].message.content;
+        let chunkInsights: any[] = [];
+        
+        try {
+          // Extract JSON from the response
+          const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const analysisData = JSON.parse(jsonMatch[0]);
+            if (analysisData.insights && Array.isArray(analysisData.insights)) {
+              chunkInsights = analysisData.insights;
+            }
+          }
+        } catch (parseError) {
+          console.warn(`Failed to parse chunk ${i+1} response:`, parseError);
+          // Continue to next chunk if this one fails
+          continue;
+        }
+        
+        // Add these insights to the overall collection
+        chunkInsights.forEach(insight => {
+          allInsights.push({
+            title: `[Part ${i+1}] ${insight.title || 'Untitled Insight'}`,
+            description: insight.description || 'No description provided',
+            severity: insight.severity || 'medium',
+            category: insight.category || 'code_quality'
+          });
+        });
+        
+        // Add delay between chunks to avoid rate limits (if not the last chunk)
+        if (i < fileChunks.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      } catch (error: any) {
+        console.error(`Error processing chunk ${i+1}:`, error);
+        
+        // If we hit a rate limit, stop processing more chunks
+        if (error.response?.status === 429) {
+          allInsights.push({
+            title: 'Rate Limit Exceeded',
+            description: 'Analysis was stopped because the OpenAI API rate limit was reached. Only partial results are available.',
+            severity: 'high',
+            category: 'best_practice'
+          });
+          break;
+        }
+        
+        // For other errors, continue with next chunk
+        continue;
+      }
+    }
+    
+    // Consolidate insights - remove duplicates
+    const consolidatedInsights = this.consolidateInsights(allInsights);
+    
+    // Add IDs to finalized insights
+    return {
+      insights: consolidatedInsights.map(insight => ({
+        ...insight,
+        id: uuidv4()
+      }))
+    };
+  }
+  
+  /**
+   * Consolidate insights from multiple chunks by removing duplicates
+   * and merging similar insights
+   */
+  private consolidateInsights(
+    allInsights: Array<{ title: string; description: string; severity: string; category: string }>
+  ): Array<{ title: string; description: string; severity: string; category: string }> {
+    // Map to track unique insights by normalized title
+    const uniqueInsights = new Map<string, { title: string; description: string; severity: string; category: string }>();
+    
+    // Process each insight
+    allInsights.forEach(insight => {
+      // Normalize the title (remove [Part X] prefix, lowercase, etc.)
+      const normalizedTitle = insight.title.replace(/\[Part \d+\]\s+/, '').toLowerCase().trim();
+      
+      // Check if we already have a similar insight
+      if (uniqueInsights.has(normalizedTitle)) {
+        // Combine if the descriptions differ significantly
+        const existing = uniqueInsights.get(normalizedTitle)!;
+        
+        // Choose the higher severity
+        const severityMap: { [key: string]: number } = { 'low': 1, 'medium': 2, 'high': 3 };
+        const existingSeverity = severityMap[existing.severity] || 1;
+        const newSeverity = severityMap[insight.severity] || 1;
+        
+        if (newSeverity > existingSeverity) {
+          existing.severity = insight.severity;
+        }
+      } else {
+        // Create a clean version of the insight without chunk numbers
+        const cleanTitle = insight.title.replace(/\[Part \d+\]\s+/, '');
+        uniqueInsights.set(normalizedTitle, {
+          ...insight,
+          title: cleanTitle
+        });
+      }
+    });
+    
+    // Convert back to array and limit to most important insights
+    const result = Array.from(uniqueInsights.values());
+    
+    // Sort by severity (high to low)
+    return result.sort((a, b) => {
+      const severityMap: { [key: string]: number } = { 'low': 1, 'medium': 2, 'high': 3 };
+      return (severityMap[b.severity] || 0) - (severityMap[a.severity] || 0);
+    });
   }
 
   /**
