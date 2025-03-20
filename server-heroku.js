@@ -1114,3 +1114,4 @@ app.listen(port, () => {
   log(`GitHub OAuth: ${process.env.GITHUB_CLIENT_ID ? 'Configured' : 'Not configured'}`);
   log(`Anthropic API: ${process.env.ANTHROPIC_API_KEY ? 'Configured' : 'Not configured'}`);
 });
+// Modified for Heroku deployment Thu Mar 20 20:17:36 IST 2025
