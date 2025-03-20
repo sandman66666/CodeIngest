@@ -198,16 +198,27 @@ Provide a specification with the following structure:
       // Assuming ~4 chars per token on average
       const MAX_CHARS = 120000; // Reduced from 600000
       
-      // If code is too large, process it in chunks
-      if (fullCode.length > MAX_CHARS) {
-        console.log(`Large codebase detected: ${(fullCode.length / 1000).toFixed(0)}K chars. Processing in chunks.`);
+      // Get size diagnostics
+      const codeSize = fullCode.length;
+      const sizeKB = Math.round(codeSize / 1024); 
+      const sizeMB = (sizeKB / 1024).toFixed(2);
+      
+      console.log(`[INFO] Repository code size: ${sizeMB} MB (${sizeKB} KB, ${codeSize} bytes)`);
+      
+      // If code is too large or we were instructed to force chunking via the sizeInBytes field
+      const forceChunking = repository.ingestedContent?.sizeInBytes && repository.ingestedContent.sizeInBytes > 500000;
+      
+      if (codeSize > MAX_CHARS || forceChunking) {
+        console.log(`[INFO] Large codebase detected: ${sizeMB} MB. Processing in chunks.`);
         return await this.analyzeCodeInChunks(fullCode, repository);
       }
       
       // For smaller codebases, process normally
-      console.log(`Code size: ${(fullCode.length / 1000).toFixed(0)}K chars, within limit`);
+      console.log(`[INFO] Code size: ${sizeMB} MB, within token limit for direct processing`);
       
       // Call OpenAI API - use gpt-3.5-turbo for better rate limits
+      console.log(`[INFO] Using model: gpt-3.5-turbo for direct analysis`);
+      
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
@@ -256,7 +267,7 @@ Identify at least 5-7 important insights.`
           throw new Error('No JSON found in response');
         }
       } catch (parseError) {
-        console.error('Failed to parse OpenAI response as JSON:', parseError);
+        console.error('[ERROR] Failed to parse OpenAI response as JSON:', parseError);
         
         // Fallback: Create mock insights if parsing fails
         return {
@@ -279,13 +290,12 @@ Identify at least 5-7 important insights.`
 
       // Ensure we have an insights array
       if (!analysisData.insights || !Array.isArray(analysisData.insights)) {
-        console.warn('No insights array in OpenAI response, creating empty array');
+        console.warn('[WARN] No insights array in OpenAI response, creating empty array');
         analysisData.insights = [];
       }
       
       return {
         insights: analysisData.insights.map((insight: any) => ({
-          id: uuidv4(), // Add IDs to match expected format
           title: insight.title || 'Untitled Insight',
           description: insight.description || 'No description provided',
           severity: insight.severity || 'medium',
@@ -293,18 +303,26 @@ Identify at least 5-7 important insights.`
         }))
       };
     } catch (error: any) {
-      console.error('OpenAI API Error:', error);
+      console.error('[ERROR] OpenAI API Error:', error);
       
       if (error.response) {
-        console.error('Status:', error.response.status);
-        console.error('Data:', error.response.data);
+        console.error('[ERROR] Status:', error.response.status);
+        console.error('[ERROR] Data:', error.response.data);
       }
       
       // Provide descriptive error for common API issues
       if (error.response?.status === 401) {
         throw new Error('Authentication error: Invalid OpenAI API key');
       } else if (error.response?.status === 429) {
-        throw new Error('Rate limit exceeded: Too many requests or token limit exceeded. Try with a smaller repository.');
+        console.log('[INFO] Rate limit exceeded. Attempting fallback to chunking...');
+        
+        try {
+          // If we hit a rate limit, force chunking for this repository
+          return await this.analyzeCodeInChunks(repository.ingestedContent?.fullCode || '', repository);
+        } catch (fallbackError) {
+          console.error('[ERROR] Chunking fallback failed:', fallbackError);
+          throw new Error('Rate limit exceeded: Too many requests or token limit exceeded. Chunking fallback also failed.');
+        }
       } else {
         throw new Error(`OpenAI API error: ${error.message || 'Unknown error'}`);
       }
@@ -617,5 +635,66 @@ export const analyzeCodeWithOpenAI = async (
   apiKey: string,
   repository: Repository
 ): Promise<{ insights: Array<{ title: string; description: string; severity: string; category: string }> }> => {
-  return openAIService.analyzeCodeWithOpenAI(apiKey, repository);
+  console.log('[INFO] Using OpenAI API key from environment variable:', apiKey.substring(0, 7) + '...' + apiKey.slice(-4));
+  console.log('[INFO] Direct OpenAI API key from environment:', apiKey.substring(0, 7) + '...' + apiKey.slice(-4));
+  console.log('[INFO] Sending request to OpenAI API using direct approach');
+  
+  try {
+    // Always use the class method that has chunking capabilities
+    return await openAIService.analyzeCodeWithOpenAI(apiKey, repository);
+  } catch (error) {
+    console.error('[ERROR] Error in analyzeCodeWithOpenAI standalone function:', error);
+    
+    // If there's an OpenAI error response, provide detailed logging
+    if (error.response) {
+      console.error('[ERROR] Status:', error.response.status);
+      console.error('[ERROR] Data:', JSON.stringify(error.response.data));
+      
+      // If it's a token limit error, provide a more helpful error message
+      if (error.response.status === 429 && error.response.data?.error?.code === 'rate_limit_exceeded') {
+        console.log('[INFO] Token limit exceeded. Attempting fallback to smaller model and chunking...');
+        
+        // Try again with a modified repository to force chunking
+        try {
+          // Make a shallow copy to not modify the original
+          const modifiedRepo = { 
+            ...repository,
+            // Simulate a large repository by adjusting fullCode size
+            ingestedContent: { 
+              ...repository.ingestedContent,
+              // If fullCode is huge, we'll trigger the chunking logic
+              sizeInBytes: repository.ingestedContent?.sizeInBytes || 1000000 // 1MB will trigger chunking
+            }
+          };
+          
+          return await openAIService.analyzeCodeWithOpenAI(apiKey, modifiedRepo);
+        } catch (fallbackError) {
+          console.error('[ERROR] Fallback attempt also failed:', fallbackError);
+          // Return a user-friendly message about the rate limit
+          return {
+            insights: [
+              {
+                title: 'Analysis Failed - Repository Too Large',
+                description: 'This repository exceeds the OpenAI token limit. Consider analyzing a smaller repository or contact support to increase your token limit.',
+                severity: 'high',
+                category: 'best_practice'
+              }
+            ]
+          };
+        }
+      }
+    }
+    
+    // Return a generic error if all else fails
+    return {
+      insights: [
+        {
+          title: 'Analysis Error',
+          description: 'An error occurred during analysis: ' + (error.message || 'Unknown error'),
+          severity: 'high',
+          category: 'best_practice'
+        }
+      ]
+    };
+  }
 };
