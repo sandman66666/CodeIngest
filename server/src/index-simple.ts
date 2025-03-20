@@ -608,10 +608,13 @@ app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
       try {
         // Use OpenAI for analysis
         console.log(`Starting code analysis with OpenAI for repository: ${repository.owner}/${repository.name}`);
+        console.log('[INFO] Code content size:', Math.round(repository.ingestedContent?.fullCode?.length / 1024), 'KB');
         
+        // Add explicit model configuration to force gpt-3.5-turbo
         const analysisResults = await analyzeCodeWithOpenAI(
           apiKey,
-          repository
+          repository,
+          { forceModel: 'gpt-3.5-turbo', forceChunking: true } // Force the right model and chunking
         );
         
         // Update the analysis with the results
