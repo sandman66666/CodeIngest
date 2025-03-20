@@ -955,11 +955,20 @@ app.post('/api/analysis/:id', async (req, res) => {
           // Parse the response and extract results
           let results = [];
           try {
-            // The Anthropic SDK returns the content differently than OpenAI
-            // It should be accessed via the content property of the first message
-            const content = response.content[0].text;
-            log(`Extracted content: ${content.substring(0, 100)}...`);
-            results = JSON.parse(content);
+            // The Anthropic SDK Messages API returns content as an array of objects with type and text
+            if (response && response.content && Array.isArray(response.content)) {
+              // Find the first content item of type 'text'
+              const textContent = response.content.find(item => item.type === 'text');
+              if (textContent && textContent.text) {
+                const content = textContent.text;
+                log(`Extracted content: ${content.substring(0, 100)}...`);
+                results = JSON.parse(content);
+              } else {
+                throw new Error('No text content found in Anthropic response');
+              }
+            } else {
+              throw new Error('Unexpected Anthropic response structure');
+            }
           } catch (parseError) {
             log(`Error parsing Anthropic response: ${parseError.message}`, 'error');
             log(`Full response: ${JSON.stringify(response)}`, 'error');
@@ -1115,4 +1124,4 @@ app.listen(port, () => {
   log(`GitHub OAuth: ${process.env.GITHUB_CLIENT_ID ? 'Configured' : 'Not configured'}`);
   log(`Anthropic API: ${process.env.ANTHROPIC_API_KEY ? 'Configured' : 'Not configured'}`);
 });
-// Modified for Heroku deployment Thu Mar 20 22:45:05 IST 2025
+// Modified for Heroku deployment Thu Mar 20 22:48:53 IST 2025
