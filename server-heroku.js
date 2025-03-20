@@ -947,8 +947,8 @@ app.post('/api/analysis/:id', async (req, res) => {
             system: "You are a code analysis assistant. Respond only with JSON."
           }, {
             headers: {
-              'anthropic-version': '2023-06-01',
               'x-api-key': anthropicApiKey.trim(),
+              'anthropic-version': '2023-06-01',
               'Content-Type': 'application/json'
             }
           });
@@ -1114,3 +1114,4 @@ app.listen(port, () => {
   log(`GitHub OAuth: ${process.env.GITHUB_CLIENT_ID ? 'Configured' : 'Not configured'}`);
   log(`Anthropic API: ${process.env.ANTHROPIC_API_KEY ? 'Configured' : 'Not configured'}`);
 });
+// Modified for Heroku deployment Thu Mar 20 20:29:02 IST 2025
