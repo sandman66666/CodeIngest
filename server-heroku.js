@@ -829,7 +829,7 @@ app.get('/api/repositories/:id', verifyToken, (req, res) => {
 });
 
 // Analysis endpoint for handling OpenAI analysis
-app.post('/api/analysis/:id', verifyToken, async (req, res) => {
+app.post('/api/analysis/:id', async (req, res) => {
   try {
     log(`POST request to /api/analysis/${req.params.id}`);
     const { id } = req.params;
@@ -1007,7 +1007,7 @@ app.post('/api/analysis/:id', verifyToken, async (req, res) => {
 });
 
 // Get analysis results endpoint
-app.get('/api/analysis/:id', verifyToken, async (req, res) => {
+app.get('/api/analysis/:id', async (req, res) => {
   try {
     log(`GET request to /api/analysis/${req.params.id}`);
     const { id } = req.params;
