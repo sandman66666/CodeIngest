@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.2.5",
-    "@anthropic-ai/sdk": "^0.10.2",
+    "@anthropic-ai/sdk": "^0.39.0",
     "@octokit/rest": "^21.1.1",
     "@types/fs-extra": "^11.0.4",
     "@types/glob": "^8.1.0",

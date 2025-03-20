@@ -3,11 +3,14 @@ import bodyParser from 'body-parser';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
 import dotenv from 'dotenv';
+import path from 'path';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
+
+// Import Anthropic service instead of OpenAI
+import { analyzeCodeWithAnthropic } from './services/anthropic-service';
 import InMemoryStore, { Analysis } from './services/in-memory-store';
 import { ingestRepository } from './services/code-ingestion';
-import { analyzeCodeWithOpenAI } from './services/openai-service';
 import privateRepositoriesRouter from './routes/private-repositories';
 
 // Load environment variables from .env file
@@ -15,7 +18,8 @@ dotenv.config();
 
 // Initialize the express application
 const app = express();
-const port = process.env.PORT || 3000;
+const defaultPort = process.env.NODE_ENV === 'production' ? 3000 : 4000;
+const port = process.env.PORT || defaultPort;
 const store = InMemoryStore.getInstance();
 
 // In-memory storage for user sessions
@@ -23,8 +27,11 @@ const sessions: Record<string, any> = {};
 
 // Environment information
 const environment = process.env.NODE_ENV || 'development';
-const githubOAuthConfigured = process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET;
-const openaiApiConfigured = process.env.OPENAI_API_KEY;
+const githubOAuthConfigured = !!(
+  process.env.GITHUB_CLIENT_ID &&
+  process.env.GITHUB_CLIENT_SECRET
+);
+const anthropicApiConfigured = !!process.env.ANTHROPIC_API_KEY;
 
 // Configure middleware
 app.use(cors());
@@ -40,9 +47,6 @@ app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
 
 // Serve static files from the client build directory
 if (process.env.NODE_ENV === 'production') {
-  const path = require('path');
-  
-  // Path to the public directory in production
   const publicPath = path.join(__dirname, '../../../public');
   
   console.log(`Serving static files from: ${publicPath}`);
@@ -568,9 +572,9 @@ app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
     store.createAnalysis(analysis);
     
     // Get API key from environment variables
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      console.warn('OpenAI API key not configured. Using mock analysis.');
+      console.warn('Anthropic API key not configured. Using mock analysis.');
       
       // If no API key, provide mock analysis after a delay
       setTimeout(() => {
@@ -581,14 +585,14 @@ app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
             {
               id: uuidv4(),
               title: 'Mock Analysis Result',
-              description: 'This is a mock result because no OpenAI API key is configured.',
+              description: 'This is a mock result because no Anthropic API key is configured.',
               severity: 'medium',
               category: 'code_quality'
             },
             {
               id: uuidv4(),
               title: 'Configuration Needed',
-              description: 'To get real analysis results, please configure an OpenAI API key in the environment variables.',
+              description: 'To get real analysis results, please configure an Anthropic API key in the environment variables.',
               severity: 'low',
               category: 'best_practice'
             }
@@ -606,15 +610,15 @@ app.post('/api/analysis/:repositoryId', async (req: Request, res: Response) => {
     // Start analysis in background
     (async () => {
       try {
-        // Use OpenAI for analysis
-        console.log(`Starting code analysis with OpenAI for repository: ${repository.owner}/${repository.name}`);
+        // Use Anthropic for analysis
+        console.log(`Starting code analysis with Anthropic for repository: ${repository.owner}/${repository.name}`);
         console.log('[INFO] Code content size:', Math.round(repository.ingestedContent?.fullCode?.length / 1024), 'KB');
         
-        // Add explicit model configuration to force gpt-3.5-turbo
-        const analysisResults = await analyzeCodeWithOpenAI(
+        // Add config for Anthropic model
+        const analysisResults = await analyzeCodeWithAnthropic(
           apiKey,
           repository,
-          { forceModel: 'gpt-3.5-turbo', forceChunking: true } // Force the right model and chunking
+          { model: 'claude-3.5-sonnet-20240620' }
         );
         
         // Update the analysis with the results
@@ -697,7 +701,7 @@ app.use('/api/private-repositories', privateRepositoriesRouter);
 app.listen(port, () => {
   console.log(`Server running on port ${port} in ${environment} mode with in-memory storage`);
   console.log(`GitHub OAuth configured: ${githubOAuthConfigured ? 'Yes' : 'No'}`);
-  console.log(`OpenAI API configured: ${openaiApiConfigured ? 'Yes' : 'No'}`);
+  console.log(`Anthropic API configured: ${anthropicApiConfigured ? 'Yes' : 'No'}`);
   
   if (environment === 'production') {
     console.log(`Server available at your app's URL`);
