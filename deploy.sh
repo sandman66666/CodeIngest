@@ -9,7 +9,7 @@ echo "// Modified for Heroku deployment $(date)" >> server-heroku.js
 
 # Add and commit changes
 git add server-heroku.js package.json
-git commit -m "Switch from OpenAI to Anthropic Claude 3.5 API"
+git commit -m "Use Anthropic SDK for better authentication handling"
 
 # Deploy to Heroku
 git push heroku anthropic-update:master -f
