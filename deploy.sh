@@ -8,8 +8,8 @@ cp server-heroku.js server-heroku.js.bak
 echo "// Modified for Heroku deployment $(date)" >> server-heroku.js
 
 # Add and commit changes
-git add server-heroku.js package.json
-git commit -m "Use Anthropic SDK for better authentication handling"
+git add server-heroku.js
+git commit -m "Fix Anthropic API response parsing"
 
 # Deploy to Heroku
 git push heroku anthropic-update:master -f
