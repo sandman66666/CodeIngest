@@ -12,6 +12,7 @@
     "heroku-postbuild": "npm install --no-shrinkwrap --no-package-lock && cd server && npm install --no-shrinkwrap --no-package-lock"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "axios": "^1.4.0",
     "base64-js": "^1.5.1",
     "body-parser": "^1.20.2",

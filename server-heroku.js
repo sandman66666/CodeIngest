@@ -6,7 +6,7 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const fs = require('fs');
-const OpenAI = require('openai');
+const Anthropic = require('@anthropic-ai/sdk'); // Replacing OpenAI with Anthropic
 
 // Logging setup
 function log(message, level = 'info') {
@@ -828,7 +828,7 @@ app.get('/api/repositories/:id', verifyToken, (req, res) => {
   return res.json({ repository });
 });
 
-// Analysis endpoint for handling OpenAI analysis
+// Analysis endpoint for handling Anthropic analysis
 app.post('/api/analysis/:id', async (req, res) => {
   try {
     log(`POST request to /api/analysis/${req.params.id}`);
@@ -874,23 +874,23 @@ app.post('/api/analysis/:id', async (req, res) => {
       try {
         log(`Starting analysis for repository ${id}`);
         
-        // Validate OpenAI API key
-        let openaiApiKey = apiKey;
-        if (!openaiApiKey || openaiApiKey.includes('placeholder')) {
+        // Validate Anthropic API key
+        let anthropicApiKey = apiKey;
+        if (!anthropicApiKey || anthropicApiKey.includes('placeholder')) {
           log('API key not provided or is a placeholder, using environment variable');
-          openaiApiKey = process.env.OPENAI_API_KEY || '';
+          anthropicApiKey = process.env.ANTHROPIC_API_KEY || '';
           
           // Log key presence without revealing the key itself
-          if (openaiApiKey) {
-            const maskedKey = openaiApiKey.substring(0, 7) + '...' + openaiApiKey.substring(openaiApiKey.length - 4);
-            log(`Using OpenAI API key from environment variable: ${maskedKey}`);
+          if (anthropicApiKey) {
+            const maskedKey = anthropicApiKey.substring(0, 7) + '...' + anthropicApiKey.substring(anthropicApiKey.length - 4);
+            log(`Using Anthropic API key from environment variable: ${maskedKey}`);
           } else {
-            log('No OpenAI API key found in environment variables', 'error');
+            log('No Anthropic API key found in environment variables', 'error');
           }
         }
         
         // Check if API key is in the correct format
-        if (!openaiApiKey.startsWith('sk-') && !openaiApiKey.startsWith('sk-proj-')) {
+        if (!anthropicApiKey.startsWith('sk-') && !anthropicApiKey.startsWith('sk-proj-')) {
           log('Provided API key does not start with "sk-" or "sk-proj-", may not be valid', 'warn');
         }
         
@@ -910,56 +910,58 @@ app.post('/api/analysis/:id', async (req, res) => {
         
         try {
           // Log the current env var directly (masked)
-          const directEnvKey = process.env.OPENAI_API_KEY || 'not set';
+          const directEnvKey = process.env.ANTHROPIC_API_KEY || 'not set';
           const maskedDirectKey = directEnvKey.substring(0, 7) + '...' + 
                                 (directEnvKey.length > 10 ? directEnvKey.substring(directEnvKey.length - 4) : '');
-          log(`Direct OpenAI API key from environment: ${maskedDirectKey}`);
+          log(`Direct Anthropic API key from environment: ${maskedDirectKey}`);
           
           // Use the direct API approach with Axios since project keys might need special handling
-          log('Sending request to OpenAI API using direct approach');
+          log('Sending request to Anthropic API using direct approach');
           
-          // Make request to OpenAI using axios directly
-          const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-            model: 'gpt-4',
+          // Make request to Anthropic using axios directly
+          const response = await axios.post('https://api.anthropic.com/v1/messages', {
+            model: 'claude-3.5-sonnet-20240620',
             messages: [
               {
-                role: 'system',
-                content: `You are a code analysis assistant. Analyze the following code and provide insightful feedback, 
+                role: 'user',
+                content: `Analyze the following code and provide insightful feedback, 
                 suggestions for improvements, and identify potential bugs or vulnerabilities. 
                 Focus on the most important aspects of the code. Your response should be structured in JSON format with the following fields:
                 [
                   {
-                    "id": "unique-id",
-                    "title": "Brief title of the insight",
-                    "description": "Detailed explanation",
-                    "severity": "high/medium/low",
-                    "category": "bug/security/performance/maintainability"
+                    "id": "unique-insight-id",
+                    "title": "Concise insight title",
+                    "description": "Detailed explanation of the insight",
+                    "severity": "high|medium|low",
+                    "category": "bug|security|performance|best_practice|code_quality"
                   }
-                ]`
-              },
-              {
-                role: 'user',
-                content: `Analyze this code repository:\n\n${codeContent}`
+                ]
+                
+                The code to analyze is: 
+                
+                ${codeContent}`
               }
             ],
-            temperature: 0.3,
-            max_tokens: 3000
+            max_tokens: 4000,
+            temperature: 0.7,
+            system: "You are a code analysis assistant. Respond only with JSON."
           }, {
             headers: {
-              'Authorization': `Bearer ${openaiApiKey.trim()}`,
+              'anthropic-version': '2023-06-01',
+              'x-api-key': anthropicApiKey.trim(),
               'Content-Type': 'application/json'
             }
           });
           
-          log('Received response from OpenAI API');
+          log('Received response from Anthropic API');
           
           // Parse the response and extract results
           let results = [];
           try {
-            const content = response.data.choices[0].message.content;
+            const content = response.data.content[0].text;
             results = JSON.parse(content);
           } catch (parseError) {
-            log(`Error parsing OpenAI response: ${parseError.message}`, 'error');
+            log(`Error parsing Anthropic response: ${parseError.message}`, 'error');
             results = [{
               id: 'parse-error',
               title: 'Error processing analysis results',
@@ -974,18 +976,18 @@ app.post('/api/analysis/:id', async (req, res) => {
           log(`Analysis completed successfully with ${results.length} insights`);
           
         } catch (apiError) {
-          log(`OpenAI API error: ${apiError.message}`, 'error');
+          log(`Anthropic API error: ${apiError.message}`, 'error');
           if (apiError.response) {
             log(`Status: ${apiError.response.status}`, 'error');
             log(`Data: ${JSON.stringify(apiError.response.data)}`, 'error');
           }
           
-          let errorMessage = 'Failed to analyze code with OpenAI';
+          let errorMessage = 'Failed to analyze code with Anthropic';
           
           if (apiError.response && apiError.response.status === 401) {
-            errorMessage = 'Invalid OpenAI API key. Please provide a valid key in the format sk-...';
+            errorMessage = 'Invalid Anthropic API key. Please provide a valid key in the format sk-...';
           } else if (apiError.response && apiError.response.status === 429) {
-            errorMessage = 'OpenAI API rate limit exceeded';
+            errorMessage = 'Anthropic API rate limit exceeded';
           } else if (apiError.message.includes('content size too large')) {
             errorMessage = 'Code content too large for analysis';
           }
@@ -1110,5 +1112,5 @@ app.listen(port, () => {
   log(`Server running on port ${port}`);
   log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   log(`GitHub OAuth: ${process.env.GITHUB_CLIENT_ID ? 'Configured' : 'Not configured'}`);
-  log(`OpenAI API: ${process.env.OPENAI_API_KEY ? 'Configured' : 'Not configured'}`);
+  log(`Anthropic API: ${process.env.ANTHROPIC_API_KEY ? 'Configured' : 'Not configured'}`);
 });
