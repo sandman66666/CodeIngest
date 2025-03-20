@@ -3,10 +3,11 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
-const { v4: uuidv4 } = require('uuid');
-const axios = require('axios');
 const fs = require('fs');
-const Anthropic = require('@anthropic-ai/sdk'); // Replacing OpenAI with Anthropic
+const { v4: uuidv4 } = require('uuid');
+const jwt = require('jsonwebtoken');
+const axios = require('axios');
+const { Client } = require('@anthropic-ai/sdk');
 
 // Logging setup
 function log(message, level = 'info') {
@@ -919,8 +920,9 @@ app.post('/api/analysis/:id', async (req, res) => {
           log('Sending request to Anthropic API using direct approach');
           
           // Make request to Anthropic using axios directly
-          const response = await axios.post('https://api.anthropic.com/v1/messages', {
-            model: 'claude-3.5-sonnet-20240620',
+          const client = new Client({apiKey: anthropicApiKey.trim()});
+          const response = await client.messages.create({
+            model: 'claude-3-5-sonnet-20240620',
             messages: [
               {
                 role: 'user',
@@ -945,12 +947,6 @@ app.post('/api/analysis/:id', async (req, res) => {
             max_tokens: 4000,
             temperature: 0.7,
             system: "You are a code analysis assistant. Respond only with JSON."
-          }, {
-            headers: {
-              'Authorization': `Bearer ${anthropicApiKey.trim()}`,
-              'anthropic-version': '2023-06-01',
-              'Content-Type': 'application/json'
-            }
           });
           
           log('Received response from Anthropic API');
@@ -958,7 +954,7 @@ app.post('/api/analysis/:id', async (req, res) => {
           // Parse the response and extract results
           let results = [];
           try {
-            const content = response.data.content[0].text;
+            const content = response.content[0].text;
             results = JSON.parse(content);
           } catch (parseError) {
             log(`Error parsing Anthropic response: ${parseError.message}`, 'error');
@@ -1114,4 +1110,4 @@ app.listen(port, () => {
   log(`GitHub OAuth: ${process.env.GITHUB_CLIENT_ID ? 'Configured' : 'Not configured'}`);
   log(`Anthropic API: ${process.env.ANTHROPIC_API_KEY ? 'Configured' : 'Not configured'}`);
 });
-// Modified for Heroku deployment Thu Mar 20 21:03:29 IST 2025
+// Modified for Heroku deployment Thu Mar 20 22:32:29 IST 2025
