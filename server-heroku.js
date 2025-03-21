@@ -918,6 +918,9 @@ app.post('/api/analysis/:id', async (req, res) => {
             apiKey: anthropicApiKey.trim(),
             defaultHeaders: {
               'anthropic-version': '2023-06-01'
+            },
+            auth: {
+              mechanism: 'bearer'
             }
           });
           
