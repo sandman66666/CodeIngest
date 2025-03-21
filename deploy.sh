@@ -1,5 +1,5 @@
 #!/bin/bash
-# Force git to see the changes and deploy to Heroku
+# Deploy the latest changes to Heroku
 
 # Make a copy of the modified file with a new name
 cp server-heroku.js server-heroku.js.bak
@@ -8,8 +8,8 @@ cp server-heroku.js server-heroku.js.bak
 echo "// Modified for Heroku deployment $(date)" >> server-heroku.js
 
 # Add and commit changes
-git add server-heroku.js package.json
-git commit -m "Use Anthropic SDK for better authentication handling"
+git add server-heroku.js
+git commit -m "Update Anthropic client with proper version header"
 
 # Deploy to Heroku
 git push heroku anthropic-update:master -f
