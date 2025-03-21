@@ -1,51 +1,57 @@
-const axios = require('axios');
+// Test file to validate Anthropic authentication
 
+const Anthropic = require('@anthropic-ai/sdk');
+
+// Create a simple test to check authentication
 async function testAnthropicAuth() {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  
-  console.log(`Using API key: ${apiKey ? apiKey.substring(0, 7) + '...' + apiKey.substring(apiKey.length - 4) : 'not set'}`);
-  
   try {
-    // Test with x-api-key header
-    console.log("\nTesting with x-api-key header:");
-    await axios.post('https://api.anthropic.com/v1/messages', {
-      model: "claude-3-5-sonnet-20240620",
+    console.log('Starting Anthropic authentication test');
+    
+    // Get API key from environment variable
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    
+    if (!apiKey) {
+      console.error('No ANTHROPIC_API_KEY found in environment variables');
+      return;
+    }
+    
+    console.log(`API key format check: starts with sk-ant-: ${apiKey.startsWith('sk-ant-')}`);
+    
+    // Create Anthropic client with detailed logging
+    console.log('Creating Anthropic client');
+    const anthropic = new Anthropic({
+      apiKey: apiKey.trim(),
+    });
+    
+    console.log('Anthropic client created successfully');
+    console.log('Client configuration:', anthropic);
+    
+    // Use a simple message test
+    console.log('Sending test message request');
+    const message = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20240620',
       max_tokens: 10,
       messages: [
-        { role: "user", content: "Hello" }
+        {
+          role: 'user',
+          content: 'Say hello' 
+        }
       ]
-    }, {
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'Content-Type': 'application/json'
-      }
     });
-    console.log("SUCCESS with x-api-key header");
+    
+    console.log('Message response received:', message);
+    console.log('Authentication test successful!');
   } catch (error) {
-    console.error("ERROR with x-api-key header:", error.response?.status, error.response?.data);
-  }
-  
-  try {
-    // Test with Authorization header
-    console.log("\nTesting with Authorization Bearer header:");
-    await axios.post('https://api.anthropic.com/v1/messages', {
-      model: "claude-3-5-sonnet-20240620",
-      max_tokens: 10,
-      messages: [
-        { role: "user", content: "Hello" }
-      ]
-    }, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'anthropic-version': '2023-06-01',
-        'Content-Type': 'application/json'
-      }
-    });
-    console.log("SUCCESS with Authorization Bearer header");
-  } catch (error) {
-    console.error("ERROR with Authorization Bearer header:", error.response?.status, error.response?.data);
+    console.error('Authentication test failed with error:', error);
+    
+    // Additional error details
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response headers:', error.response.headers);
+      console.error('Response data:', error.response.data);
+    }
   }
 }
 
+// Run the test
 testAnthropicAuth();
