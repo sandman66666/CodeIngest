@@ -891,8 +891,8 @@ app.post('/api/analysis/:id', async (req, res) => {
         }
         
         // Check if API key is in the correct format
-        if (!anthropicApiKey.startsWith('sk-') && !anthropicApiKey.startsWith('sk-proj-')) {
-          log('Provided API key does not start with "sk-" or "sk-proj-", may not be valid', 'warn');
+        if (!anthropicApiKey.startsWith('sk-') && !anthropicApiKey.startsWith('sk-proj-') && !anthropicApiKey.startsWith('sk-ant-')) {
+          log('Provided API key does not start with "sk-", "sk-proj-", or "sk-ant-", may not be valid', 'warn');
         }
         
         log('Preparing code for analysis');
@@ -1128,4 +1128,4 @@ app.listen(port, () => {
   log(`Anthropic API: ${process.env.ANTHROPIC_API_KEY ? 'Configured' : 'Not configured'}`);
 });
 // Modified for Heroku deployment Thu Mar 20 22:48:53 IST 2025
-// Modified for Heroku deployment Fri Mar 21 13:45:44 IST 2025
+// Modified for Heroku deployment Fri Mar 21 13:56:52 IST 2025
