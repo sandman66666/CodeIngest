@@ -913,10 +913,15 @@ app.post('/api/analysis/:id', async (req, res) => {
           // Use the Anthropic SDK based on the provided example
           log('Sending request to Anthropic API using SDK approach');
           
-          // Create Anthropic client according to the provided example
+          // Create Anthropic client according to the provided example with the correct version
           const anthropic = new Anthropic({
-            apiKey: anthropicApiKey.trim()
+            apiKey: anthropicApiKey.trim(),
+            defaultHeaders: {
+              'anthropic-version': '2023-06-01'
+            }
           });
+          
+          log('Initialized Anthropic client with API key beginning with: ' + anthropicApiKey.substring(0, 10) + '...');
           
           const response = await anthropic.messages.create({
             model: 'claude-3-5-sonnet-20240620',
@@ -1121,4 +1126,4 @@ app.listen(port, () => {
   log(`Anthropic API: ${process.env.ANTHROPIC_API_KEY ? 'Configured' : 'Not configured'}`);
 });
 // Modified for Heroku deployment Thu Mar 20 22:48:53 IST 2025
-// Modified for Heroku deployment Fri Mar 21 14:11:16 IST 2025
+// Modified for Heroku deployment Fri Mar 21 16:07:54 IST 2025
