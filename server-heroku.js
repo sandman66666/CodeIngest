@@ -919,8 +919,11 @@ app.post('/api/analysis/:id', async (req, res) => {
           // Use the direct API approach with Axios since project keys might need special handling
           log('Sending request to Anthropic API using direct approach');
           
-          // Make request to Anthropic using axios directly
-          const client = new Anthropic.Client({apiKey: anthropicApiKey.trim()});
+          // Create Anthropic client according to the official documentation
+          const client = new Anthropic({
+            apiKey: anthropicApiKey.trim()
+          });
+          
           const response = await client.messages.create({
             model: 'claude-3-5-sonnet-20240620',
             messages: [
@@ -1125,3 +1128,4 @@ app.listen(port, () => {
   log(`Anthropic API: ${process.env.ANTHROPIC_API_KEY ? 'Configured' : 'Not configured'}`);
 });
 // Modified for Heroku deployment Thu Mar 20 22:48:53 IST 2025
+// Modified for Heroku deployment Fri Mar 21 13:45:44 IST 2025
