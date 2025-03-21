@@ -917,51 +917,57 @@ app.post('/api/analysis/:id', async (req, res) => {
           log(`Direct Anthropic API key from environment: ${maskedDirectKey}`);
           
           // Use the direct API approach with Axios since project keys might need special handling
-          log('Sending request to Anthropic API using direct approach');
+          log('Sending request to Anthropic API using direct axios approach');
           
-          // Create Anthropic client according to the official documentation
-          const client = new Anthropic({
-            apiKey: anthropicApiKey.trim()
-          });
-          
-          const response = await client.messages.create({
-            model: 'claude-3-5-sonnet-20240620',
-            messages: [
-              {
-                role: 'user',
-                content: `Analyze the following code and provide insightful feedback, 
-                suggestions for improvements, and identify potential bugs or vulnerabilities. 
-                Focus on the most important aspects of the code. Your response should be structured in JSON format with the following fields:
-                [
-                  {
-                    "id": "unique-insight-id",
-                    "title": "Concise insight title",
-                    "description": "Detailed explanation of the insight",
-                    "severity": "high|medium|low",
-                    "category": "bug|security|performance|best_practice|code_quality"
-                  }
-                ]
-                
-                The code to analyze is: 
-                
-                ${codeContent}`
+          // Make request to Anthropic API directly with axios
+          const response = await axios.post(
+            'https://api.anthropic.com/v1/messages',
+            {
+              model: 'claude-3-5-sonnet-20240620',
+              messages: [
+                {
+                  role: 'user',
+                  content: `Analyze the following code and provide insightful feedback, 
+                  suggestions for improvements, and identify potential bugs or vulnerabilities. 
+                  Focus on the most important aspects of the code. Your response should be structured in JSON format with the following fields:
+                  [
+                    {
+                      "id": "unique-insight-id",
+                      "title": "Concise insight title",
+                      "description": "Detailed explanation of the insight",
+                      "severity": "high|medium|low",
+                      "category": "bug|security|performance|best_practice|code_quality"
+                    }
+                  ]
+                  
+                  The code to analyze is: 
+                  
+                  ${codeContent}`
+                }
+              ],
+              max_tokens: 4000,
+              temperature: 0.7,
+              system: "You are a code analysis assistant. Respond only with JSON."
+            },
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': anthropicApiKey.trim(),
+                'anthropic-version': '2023-06-01'
               }
-            ],
-            max_tokens: 4000,
-            temperature: 0.7,
-            system: "You are a code analysis assistant. Respond only with JSON."
-          });
+            }
+          );
           
           log('Received response from Anthropic API');
-          log(`Anthropic response structure: ${JSON.stringify(Object.keys(response))}`);
+          log(`Anthropic response structure: ${JSON.stringify(Object.keys(response.data))}`);
           
           // Parse the response and extract results
           let results = [];
           try {
-            // The Anthropic SDK Messages API returns content as an array of objects with type and text
-            if (response && response.content && Array.isArray(response.content)) {
+            // Direct axios approach returns data
+            if (response && response.data && response.data.content && Array.isArray(response.data.content)) {
               // Find the first content item of type 'text'
-              const textContent = response.content.find(item => item.type === 'text');
+              const textContent = response.data.content.find(item => item.type === 'text');
               if (textContent && textContent.text) {
                 const content = textContent.text;
                 log(`Extracted content: ${content.substring(0, 100)}...`);
@@ -1128,4 +1134,4 @@ app.listen(port, () => {
   log(`Anthropic API: ${process.env.ANTHROPIC_API_KEY ? 'Configured' : 'Not configured'}`);
 });
 // Modified for Heroku deployment Thu Mar 20 22:48:53 IST 2025
-// Modified for Heroku deployment Fri Mar 21 13:56:52 IST 2025
+// Modified for Heroku deployment Fri Mar 21 14:08:34 IST 2025
