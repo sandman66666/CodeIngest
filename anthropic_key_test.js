@@ -3,11 +3,13 @@ const Anthropic = require('@anthropic-ai/sdk');
 const axios = require('axios');
 require('dotenv').config();
 
-// Get the API key from environment
-const apiKey = process.env.ANTHROPIC_API_KEY || '';
+// Get the API key from command line argument or environment
+const apiKey = process.argv[2] || process.env.ANTHROPIC_API_KEY || '';
 
 if (!apiKey) {
-  console.error('No Anthropic API key found in environment variables');
+  console.error('No Anthropic API key provided. Please provide it as a command line argument:');
+  console.error('node anthropic_key_test.js YOUR_API_KEY');
+  console.error('Or set it as an environment variable: ANTHROPIC_API_KEY');
   process.exit(1);
 }
 
@@ -21,6 +23,9 @@ async function testSDK() {
     // Test with SDK
     const anthropic = new Anthropic({
       apiKey: apiKey.trim(),
+      defaultHeaders: {
+        'anthropic-version': '2023-06-01'
+      }
     });
     
     console.log('SDK initialized successfully');
