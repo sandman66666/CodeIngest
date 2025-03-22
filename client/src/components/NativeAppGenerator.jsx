@@ -1,10 +1,60 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 const NativeAppGenerator = ({ repositoryId, hasGeneratedApp, swiftCode }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [generatedCode, setGeneratedCode] = useState(swiftCode || '');
+  const [status, setStatus] = useState(hasGeneratedApp ? 'completed' : 'not_started');
+  const [polling, setPolling] = useState(false);
+
+  // Check status if already in progress
+  useEffect(() => {
+    if (status === 'pending') {
+      setPolling(true);
+    }
+  }, [status]);
+
+  // Poll for status updates
+  useEffect(() => {
+    let intervalId;
+    
+    if (polling) {
+      checkStatus();
+      
+      // Check status every 5 seconds
+      intervalId = setInterval(checkStatus, 5000);
+    }
+    
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [polling, repositoryId]);
+
+  const checkStatus = async () => {
+    try {
+      const response = await axios.get(`/api/generate-native-app/${repositoryId}/status`);
+      const { status: statusCode, swiftCode, error: statusError } = response.data;
+      
+      setStatus(statusCode);
+      
+      if (statusCode === 'completed' && swiftCode) {
+        setGeneratedCode(swiftCode);
+        setPolling(false);
+      } else if (statusCode === 'error') {
+        setError(statusError || 'Failed to generate Swift code');
+        setPolling(false);
+        setLoading(false);
+      } else if (statusCode !== 'pending') {
+        setPolling(false);
+      }
+    } catch (err) {
+      console.error('Error checking status:', err);
+      // Don't stop polling on a single error
+    }
+  };
 
   const handleGenerateApp = async () => {
     setLoading(true);
@@ -12,12 +62,11 @@ const NativeAppGenerator = ({ repositoryId, hasGeneratedApp, swiftCode }) => {
     
     try {
       const response = await axios.post(`/api/generate-native-app/${repositoryId}`);
-      setGeneratedCode(response.data.repository.nativeApp.swiftCode);
+      setStatus('pending');
+      setPolling(true);
     } catch (err) {
-      const errorMessage = err.response?.data?.error || 'Failed to generate native app code';
+      const errorMessage = err.response?.data?.error || 'Failed to start native app generation';
       setError(errorMessage);
-      console.error('Error details:', err.response?.data);
-    } finally {
       setLoading(false);
     }
   };
@@ -33,7 +82,7 @@ const NativeAppGenerator = ({ repositoryId, hasGeneratedApp, swiftCode }) => {
       
       {error && <div className="alert alert-error">{error}</div>}
       
-      {!hasGeneratedApp && !generatedCode && (
+      {status === 'not_started' && (
         <button 
           onClick={handleGenerateApp} 
           disabled={loading}
@@ -42,13 +91,21 @@ const NativeAppGenerator = ({ repositoryId, hasGeneratedApp, swiftCode }) => {
           {loading ? (
             <>
               <span className="spinner"></span>
-              <span>Generating iOS App...</span>
+              <span>Starting Generation...</span>
             </>
           ) : 'Build Native iPhone App'}
         </button>
       )}
       
-      {generatedCode && (
+      {status === 'pending' && (
+        <div className="generation-status">
+          <div className="spinner"></div>
+          <p>Generating iOS app code... This may take a few minutes.</p>
+          <p className="hint">The page will automatically update when complete.</p>
+        </div>
+      )}
+      
+      {generatedCode && status === 'completed' && (
         <div className="generated-code">
           <h3>Generated Swift Code</h3>
           <div className="code-view">

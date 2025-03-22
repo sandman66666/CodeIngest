@@ -571,11 +571,80 @@ app.post('/api/generate-native-app/:id', async (req, res) => {
       });
     }
     
+    // Initialize or update the nativeApp status in the repository data
+    repository.nativeApp = {
+      status: 'pending',
+      startedAt: new Date().toISOString(),
+      swiftCode: null
+    };
+    
+    // Save updated repository data
+    fs.writeFileSync(`./data/repositories/${req.params.id}.json`, JSON.stringify(repository, null, 2));
+    
+    // Respond immediately to avoid Heroku's 30-second timeout
+    res.json({ 
+      success: true,
+      status: 'pending',
+      repository
+    });
+    
+    // Start the generation process in the background
+    generateNativeAppCode(req.params.id, repository)
+      .catch(error => {
+        console.error('Background native app generation failed:', error);
+      });
+    
+  } catch (error) {
+    console.error('Error starting native app generation:', error.message);
+    return res.status(500).json({ 
+      error: 'Failed to start native app generation process' 
+    });
+  }
+});
+
+app.get('/api/generate-native-app/:id/status', async (req, res) => {
+  try {
+    // Find repository
+    let repository = null;
+    try {
+      const data = fs.readFileSync(`./data/repositories/${req.params.id}.json`, 'utf8');
+      repository = JSON.parse(data);
+    } catch (error) {
+      console.error(`Error loading repository ${req.params.id}:`, error);
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+    
+    if (!repository.nativeApp) {
+      return res.json({ 
+        status: 'not_started'
+      });
+    }
+    
+    return res.json({ 
+      status: repository.nativeApp.status,
+      swiftCode: repository.nativeApp.swiftCode,
+      startedAt: repository.nativeApp.startedAt,
+      completedAt: repository.nativeApp.completedAt,
+      error: repository.nativeApp.error
+    });
+    
+  } catch (error) {
+    console.error('Error checking native app generation status:', error.message);
+    return res.status(500).json({ 
+      error: 'Failed to check generation status' 
+    });
+  }
+});
+
+// Background function for generating native app code
+async function generateNativeAppCode(repositoryId, repository) {
+  try {
     // Use Claude API to generate Swift code
     const apiKey = process.env.ANTHROPIC_API_KEY;
     
     if (!apiKey) {
-      return res.status(500).json({ error: 'Anthropic API key not configured on server' });
+      updateNativeAppStatus(repositoryId, 'error', null, 'Anthropic API key not configured on server');
+      return;
     }
     
     // Configure Anthropic API client with updated headers
@@ -600,6 +669,7 @@ app.post('/api/generate-native-app/:id', async (req, res) => {
     const repoOwner = repository.owner;
     const repoName = repository.name;
     const repoDescription = repository.summary?.description || '';
+    const codeContent = repository.ingestedContent?.fullCode || '';
     
     // Create system prompt
     const systemPrompt = `You are an expert iOS developer who specializes in converting web applications to native iOS apps using Swift and SwiftUI. 
@@ -646,28 +716,43 @@ Provide complete Swift files organized in a typical iOS project structure.`
     // Extract the response content
     const generatedSwiftCode = response.data.content[0].text;
     
-    // Store the generated Swift code in the repository data
-    repository.nativeApp = {
-      generatedAt: new Date().toISOString(),
-      swiftCode: generatedSwiftCode
-    };
+    // Update the status to complete
+    updateNativeAppStatus(repositoryId, 'completed', generatedSwiftCode);
     
-    // Save updated repository data
-    fs.writeFileSync(`./data/repositories/${req.params.id}.json`, JSON.stringify(repository, null, 2));
+    console.log(`Native app generation completed for repository ${repositoryId}`);
     
-    return res.json({ 
-      success: true,
-      repository
-    });
   } catch (error) {
     console.error('Error generating native app:', error.message);
     console.error('Error details:', error.response?.data);
     
-    return res.status(error.response?.status || 500).json({ 
-      error: error.response?.data?.error?.message || 'Failed to generate native app code' 
-    });
+    const errorMessage = error.response?.data?.error?.message || 'Failed to generate native app code';
+    updateNativeAppStatus(repositoryId, 'error', null, errorMessage);
   }
-});
+}
+
+// Helper function to update the native app status in the repository data
+function updateNativeAppStatus(repositoryId, status, swiftCode = null, error = null) {
+  try {
+    // Read the current repository data
+    const data = fs.readFileSync(`./data/repositories/${repositoryId}.json`, 'utf8');
+    const repository = JSON.parse(data);
+    
+    // Update the nativeApp object
+    repository.nativeApp = {
+      ...repository.nativeApp,
+      status,
+      completedAt: new Date().toISOString(),
+      swiftCode,
+      error
+    };
+    
+    // Save updated repository data
+    fs.writeFileSync(`./data/repositories/${repositoryId}.json`, JSON.stringify(repository, null, 2));
+    
+  } catch (error) {
+    console.error(`Error updating native app status for repository ${repositoryId}:`, error);
+  }
+}
 
 // Serve static files from the React build directory in production
 if (process.env.NODE_ENV === 'production') {
