@@ -462,8 +462,8 @@ app.post('/api/extract/:id', async (req, res) => {
     const codeContent = repository.ingestedContent.fullCode || '';
     const repoDescription = repository.summary.description || '';
     
-    // Create prompt for Claude
-    const systemPrompt = "You are an expert code analyzer. Extract the core algorithms and key elements from the provided code. Focus on the most important parts that help understand how the code works.";
+    // Create prompt for Claude - focus on extractable code patterns
+    const systemPrompt = "You are an expert code assistant who specializes in extracting reusable code patterns. Your task is to identify the most important and reusable code from repositories and present them in a format that can be directly copied and reused by AI systems or developers.";
     
     // Log API request (excluding the full code content for brevity)
     console.log('Sending request to Claude API with:');
@@ -480,7 +480,7 @@ app.post('/api/extract/:id', async (req, res) => {
       messages: [
         {
           role: "user",
-          content: `Analyze this GitHub repository code and extract the core algorithms and key elements.
+          content: `Extract the most reusable and important code from this GitHub repository. Focus on providing code snippets that can be directly used as a reference for AI to build similar functionality.
             
 Repository: ${repository.owner}/${repository.name}
 Description: ${repoDescription}
@@ -489,7 +489,16 @@ Here's the code:
 
 ${codeContent}
 
-Extract and present only the core algorithms and key elements from this code with brief comments explaining what each part does.`
+Extract and present the core code patterns and key functions that would enable an AI or developer to quickly implement similar functionality. Include:
+
+1. Essential data structures or class definitions
+2. Key functions with their implementations
+3. Critical algorithms and workflows
+4. Important configuration settings
+5. Core API definitions
+6. Main interfaces and their implementations
+
+For each extracted piece, include a brief comment explaining its purpose, but prioritize showing the actual code itself. Format code properly with correct syntax.`
         }
       ]
     });

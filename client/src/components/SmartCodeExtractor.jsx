@@ -25,9 +25,10 @@ const SmartCodeExtractor = ({ repositoryId }) => {
     <div className="code-extractor">
       <h2>Smart Code Extractor</h2>
       <p>
-        Extract the core algorithms and key elements from the code based on the assumption 
-        that the code will be used as reference with an AI bot. This provides just enough 
-        for AI to understand the logic and the app.
+        Extract the most important and reusable code patterns from this repository. 
+        This provides actual code snippets that can be directly used as a reference for AI 
+        to build similar functionality, including data structures, key functions, 
+        algorithms, and interfaces.
       </p>
       
       {error && <div className="alert alert-error">{error}</div>}
@@ -42,12 +43,12 @@ const SmartCodeExtractor = ({ repositoryId }) => {
             <span className="spinner"></span>
             <span>Extracting...</span>
           </>
-        ) : 'Extract Key Code Elements'}
+        ) : 'Extract Reusable Code Patterns'}
       </button>
       
       {extractedCode && (
         <div className="extracted-code">
-          <h3>Extracted Core Code</h3>
+          <h3>Extracted Code Patterns</h3>
           <div className="code-view">
             <pre>{extractedCode}</pre>
           </div>
