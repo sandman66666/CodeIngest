@@ -8,6 +8,9 @@ const axios = require('axios');
 const fs = require('fs');
 const archiver = require('archiver');
 const os = require('os');
+const session = require('express-session');
+const passport = require('passport');
+const GitHubStrategy = require('passport-github2').Strategy;
 
 // Load environment variables
 dotenv.config();
@@ -19,9 +22,61 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? 'https://codanalyzer-49ec21ea6aca.herokuapp.com' 
+    : 'http://localhost:3001',
+  credentials: true
+}));
 app.use(express.json());
 app.use(morgan('dev'));
+
+// Session configuration - non-persistent, memory only
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'codeingest-session-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { 
+    secure: process.env.NODE_ENV === 'production', 
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Configure GitHub strategy
+passport.use(new GitHubStrategy({
+    clientID: process.env.GITHUB_CLIENT_ID,
+    clientSecret: process.env.GITHUB_CLIENT_SECRET,
+    callbackURL: process.env.NODE_ENV === 'production'
+      ? 'https://codanalyzer-49ec21ea6aca.herokuapp.com/auth/github/callback'
+      : 'http://localhost:3000/auth/github/callback',
+    scope: ['user:email', 'repo'] // Request access to user's repositories
+  },
+  function(accessToken, refreshToken, profile, done) {
+    // Store only the minimum user data needed
+    const user = {
+      id: profile.id,
+      username: profile.username,
+      displayName: profile.displayName || profile.username,
+      accessToken: accessToken
+    };
+    
+    return done(null, user);
+  }
+));
+
+// Serialize user to session
+passport.serializeUser((user, done) => {
+  done(null, user);
+});
+
+// Deserialize user from session
+passport.deserializeUser((user, done) => {
+  done(null, user);
+});
 
 // Create a data directory for storing repositories
 if (!fs.existsSync('./data')) {
@@ -31,16 +86,143 @@ if (!fs.existsSync('./data/repositories')) {
   fs.mkdirSync('./data/repositories');
 }
 
+// Utility function to build a tree representation from GitHub files
+function buildFileTree(items) {
+  // Sort items by path
+  const sortedItems = [...items].sort((a, b) => a.path.localeCompare(b.path));
+  
+  // Initialize tree structure
+  let formattedTree = '';
+  let lastPathParts = [];
+  
+  // Process each item
+  for (const item of sortedItems) {
+    // Skip non-blob items (we only want files, not directories)
+    if (item.type !== 'blob') continue;
+    
+    const parts = item.path.split('/');
+    
+    // Calculate common path with the last entry
+    let commonPathLength = 0;
+    if (lastPathParts.length > 0) {
+      for (let i = 0; i < Math.min(parts.length - 1, lastPathParts.length - 1); i++) {
+        if (parts[i] === lastPathParts[i]) {
+          commonPathLength = i + 1;
+        } else {
+          break;
+        }
+      }
+    }
+    
+    // Add directories that are different from the last path
+    for (let i = commonPathLength; i < parts.length - 1; i++) {
+      const indent = '│   '.repeat(i);
+      formattedTree += `${indent}├── ${parts[i]}/\n`;
+    }
+    
+    // Add the file
+    const fileIndent = '│   '.repeat(parts.length - 1);
+    formattedTree += `${fileIndent}├── ${parts[parts.length - 1]}\n`;
+    
+    lastPathParts = parts;
+  }
+  
+  return formattedTree;
+}
+
+// Helper function for ignoring certain file types in JSON output
+function isJsonIgnorableFile(filePath) {
+  // Skip binary, media, and other non-code files
+  const ignoredExtensions = [
+    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', 
+    '.ico', '.woff', '.woff2', '.ttf', '.eot',
+    '.mp3', '.mp4', '.wav', '.avi', '.mov',
+    '.zip', '.tar', '.gz', '.rar',
+    '.exe', '.dll', '.so',
+    '.min.js', '.min.css'  // Minified files
+  ];
+  
+  // Skip hidden files and directories
+  if (filePath.split('/').some(part => part.startsWith('.'))) {
+    return true;
+  }
+  
+  // Skip by extension
+  for (const ext of ignoredExtensions) {
+    if (filePath.toLowerCase().endsWith(ext)) {
+      return true;
+    }
+  }
+  
+  // Skip node_modules, etc.
+  const ignoredDirs = ['node_modules', 'dist', 'build', 'vendor', 'bin'];
+  if (ignoredDirs.some(dir => filePath.includes(`/${dir}/`))) {
+    return true;
+  }
+  
+  return false;
+}
+
+// Authentication Routes
+app.get('/auth/github',
+  passport.authenticate('github'));
+
+app.get('/auth/github/callback', 
+  passport.authenticate('github', { 
+    failureRedirect: '/' 
+  }),
+  function(req, res) {
+    // Successful authentication, redirect home
+    res.redirect('/');
+  }
+);
+
+app.get('/auth/user', (req, res) => {
+  if (req.isAuthenticated()) {
+    res.json({
+      isAuthenticated: true,
+      user: {
+        id: req.user.id,
+        username: req.user.username,
+        displayName: req.user.displayName
+      }
+    });
+  } else {
+    res.json({
+      isAuthenticated: false
+    });
+  }
+});
+
+app.get('/auth/logout', (req, res) => {
+  req.logout(function(err) {
+    if (err) { return next(err); }
+    res.redirect('/');
+  });
+});
+
+// Helper function to create GitHub API client
+const createGitHubClient = (req) => {
+  const headers = {
+    Accept: 'application/vnd.github.v3+json'
+  };
+  
+  // If user is authenticated, add their token
+  if (req.isAuthenticated()) {
+    headers.Authorization = `token ${req.user.accessToken}`;
+  }
+  
+  return axios.create({
+    baseURL: 'https://api.github.com',
+    headers
+  });
+};
+
 // In-memory repository store (in production, use a database)
 const repositories = [];
 
 // GitHub API client
-const github = axios.create({
-  baseURL: 'https://api.github.com',
-  headers: {
-    Accept: 'application/vnd.github.v3+json'
-  }
-});
+const github = createGitHubClient({});
 
 // Filter functions for important files
 const isImportantFile = (filePath, extension) => {
@@ -78,137 +260,95 @@ app.post('/api/public-repositories', async (req, res) => {
       return res.status(400).json({ error: 'Repository URL is required' });
     }
     
-    // Extract owner and name from GitHub URL
-    const urlPattern = /github\.com\/([^\/]+)\/([^\/]+)/;
-    const match = url.match(urlPattern);
+    // Parse GitHub URL
+    const githubUrlPattern = /github\.com\/([^\/]+)\/([^\/]+)/;
+    const match = url.match(githubUrlPattern);
     
     if (!match) {
-      return res.status(400).json({ error: 'Invalid GitHub URL format' });
+      return res.status(400).json({ error: 'Invalid GitHub repository URL' });
     }
     
-    const [, owner, name] = match;
+    const owner = match[1];
+    const name = match[2].replace('.git', '');
     
-    // Fetch repository metadata from GitHub
-    const repoResponse = await github.get(`/repos/${owner}/${name}`);
-    const repo = repoResponse.data;
+    // Create a GitHub client based on the current user's auth status
+    const githubClient = createGitHubClient(req);
     
-    // Fetch repository tree recursively to get all files
-    const treeResponse = await github.get(`/repos/${owner}/${name}/git/trees/${repo.default_branch}?recursive=1`);
-    const tree = treeResponse.data;
-    
-    if (tree.truncated) {
-      console.warn('Repository tree is truncated due to size');
+    // Check if repository exists and is accessible
+    let repoData;
+    try {
+      const response = await githubClient.get(`/repos/${owner}/${name}`);
+      repoData = response.data;
+    } catch (error) {
+      if (error.response?.status === 404) {
+        return res.status(404).json({ error: 'Repository not found or not accessible' });
+      } else {
+        throw error;
+      }
     }
     
-    // Format the tree for display
-    let formattedTree = '';
-    const fileEntries = {};
-    let fileCount = 0;
-    let totalSize = 0;
+    console.log(`Ingesting repository: ${owner}/${name}`);
+    console.log('Repository info:', {
+      stars: repoData.stargazers_count,
+      language: repoData.language,
+      description: repoData.description,
+      private: repoData.private
+    });
     
-    // Process files
-    for (const item of tree.tree) {
-      // Skip directories
-      if (item.type === 'tree') continue;
-      
-      // Get file extension
-      const extension = path.extname(item.path);
-      
-      // Check if file should be included based on filter
-      if (!includeAllFiles && !isImportantFile(item.path, extension)) {
-        continue;
-      }
-      
-      // Skip files that are too large
-      if (item.size > FILE_SIZE_LIMIT) {
-        console.warn(`Skipping large file: ${item.path} (${item.size} bytes)`);
-        continue;
-      }
-      
-      fileEntries[item.path] = item;
-      fileCount++;
-      totalSize += item.size || 0;
-    }
+    // Get repository contents
+    const contents = await githubClient.get(`/repos/${owner}/${name}/git/trees/HEAD?recursive=1`);
     
-    // Build formatted tree for display
-    const pathSegments = Object.keys(fileEntries).sort();
+    // Filter for important files based on extension
+    const filteredFiles = contents.data.tree
+      .filter(item => {
+        if (item.type !== 'blob') return false;
+        
+        // If includeAllFiles is true, include most files except binary/large files
+        if (includeAllFiles) {
+          return !isJsonIgnorableFile(item.path);
+        } 
+        
+        // Otherwise only include important files based on extension
+        return isImportantFile(item.path);
+      })
+      .filter(item => item.size <= FILE_SIZE_LIMIT);
     
-    let currentIndent = '';
-    let lastPathParts = [];
+    console.log(`Found ${filteredFiles.length} important files to ingest`);
     
-    for (const filePath of pathSegments) {
-      const parts = filePath.split('/');
-      
-      // Calculate the common part with the last path
-      let commonPathLength = 0;
-      if (lastPathParts.length > 0) {
-        for (let i = 0; i < Math.min(parts.length - 1, lastPathParts.length - 1); i++) {
-          if (parts[i] === lastPathParts[i]) {
-            commonPathLength = i + 1;
-          } else {
-            break;
-          }
-        }
-      }
-      
-      // Add directories that are different from the last path
-      for (let i = commonPathLength; i < parts.length - 1; i++) {
-        const indent = '│   '.repeat(i);
-        formattedTree += `${indent}├── ${parts[i]}/\n`;
-      }
-      
-      // Add the file
-      const fileIndent = '│   '.repeat(parts.length - 1);
-      formattedTree += `${fileIndent}├── ${parts[parts.length - 1]}\n`;
-      
-      lastPathParts = parts;
-    }
+    // Create a tree representation for display
+    const fileTree = buildFileTree(contents.data.tree);
     
-    // Try to fetch the README file
-    let readme = null;
-    const readmeFile = Object.keys(fileEntries).find(path => 
-      path.toLowerCase().includes('readme.md') || path.toLowerCase() === 'readme'
+    // Get README content if available
+    let readmeContent = '';
+    const readmeFile = contents.data.tree.find(item => 
+      item.path.toLowerCase() === 'readme.md' || 
+      item.path.toLowerCase() === 'readme' ||
+      item.path.toLowerCase() === 'readme.txt'
     );
     
     if (readmeFile) {
       try {
-        const readmeResponse = await github.get(
-          `/repos/${owner}/${name}/contents/${readmeFile}`,
-          { headers: { Accept: 'application/vnd.github.raw' } }
-        );
-        readme = readmeResponse.data;
-      } catch (err) {
-        console.error(`Error fetching README: ${err.message}`);
+        const readmeResponse = await githubClient.get(`/repos/${owner}/${name}/contents/${readmeFile.path}`);
+        if (readmeResponse.data.content) {
+          readmeContent = Buffer.from(readmeResponse.data.content, 'base64').toString('utf-8');
+        }
+      } catch (error) {
+        console.error('Error fetching README:', error.message);
       }
     }
     
-    // Get the full code for important files
-    let fullCode = '';
-    const maxFilesToInclude = 10; // Limit the number of files to include in the code view
-    let filesAdded = 0;
-    
-    for (const filePath of pathSegments) {
-      if (filesAdded >= maxFilesToInclude) break;
-      
-      const extension = path.extname(filePath);
-      // Only include code files, not assets, etc.
-      const codeExtensions = ['.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.rb', '.php', '.go', '.rs', '.c', '.cpp'];
-      
-      if (codeExtensions.includes(extension)) {
-        try {
-          const contentResponse = await github.get(
-            `/repos/${owner}/${name}/contents/${filePath}`,
-            { headers: { Accept: 'application/vnd.github.raw' } }
-          );
-          
-          fullCode += `// File: ${filePath}\n\n`;
-          fullCode += contentResponse.data;
-          fullCode += '\n\n' + '='.repeat(80) + '\n\n';
-          
-          filesAdded++;
-        } catch (err) {
-          console.error(`Error fetching file ${filePath}: ${err.message}`);
+    // Get contents of each file
+    let allCode = '';
+    for (const file of filteredFiles) {
+      try {
+        const fileResponse = await githubClient.get(`/repos/${owner}/${name}/contents/${file.path}`);
+        
+        if (fileResponse.data.content) {
+          const content = Buffer.from(fileResponse.data.content, 'base64').toString('utf-8');
+          allCode += `\n\n// File: ${file.path}\n${content}`;
         }
+      } catch (error) {
+        console.error(`Error fetching ${file.path}:`, error.message);
       }
     }
     
@@ -218,36 +358,30 @@ app.post('/api/public-repositories', async (req, res) => {
       url,
       owner,
       name,
-      fileCount,
-      sizeInBytes: totalSize,
       createdAt: new Date().toISOString(),
       summary: {
-        language: repo.language,
-        stars: repo.stargazers_count,
-        forks: repo.forks_count,
-        description: repo.description
+        stars: repoData.stargazers_count,
+        language: repoData.language,
+        description: repoData.description,
+        isPrivate: repoData.private
       },
+      fileCount: filteredFiles.length,
+      sizeInBytes: filteredFiles.reduce((sum, file) => sum + file.size, 0),
       ingestedContent: {
-        allFilesIncluded: includeAllFiles,
-        tree: formattedTree,
-        fullCode,
-        readme
+        tree: fileTree,
+        fullCode: allCode,
+        readme: readmeContent,
+        allFilesIncluded: includeAllFiles
       }
     };
     
-    // Add to in-memory store
-    repositories.unshift(repository);
+    // Store repository in filesystem
+    fs.writeFileSync(`./data/repositories/${repository.id}.json`, JSON.stringify(repository, null, 2));
     
-    // Save to file system (in production, use a database)
-    fs.writeFileSync(
-      `./data/repositories/${repository.id}.json`, 
-      JSON.stringify(repository, null, 2)
-    );
+    console.log(`Repository ${owner}/${name} ingested successfully`);
     
-    return res.status(201).json({ 
-      success: true,
-      repository
-    });
+    return res.status(201).json({ success: true, repository });
+    
   } catch (error) {
     console.error('Error ingesting repository:', error.message);
     return res.status(error.response?.status || 500).json({ 
@@ -256,26 +390,73 @@ app.post('/api/public-repositories', async (req, res) => {
   }
 });
 
+// Get all repositories
 app.get('/api/repositories', (req, res) => {
   // In a real app, this would fetch from a database
   // For now, reading from filesystem
   try {
-    const repoIds = fs.readdirSync('./data/repositories')
+    const files = fs.readdirSync('./data/repositories');
+    const repositories = files
       .filter(file => file.endsWith('.json'))
-      .map(file => file.replace('.json', ''));
+      .map(file => {
+        const data = fs.readFileSync(`./data/repositories/${file}`, 'utf8');
+        const repo = JSON.parse(data);
+        
+        // If the repository is private, only return it if the user is authenticated
+        // and it belongs to the authenticated user
+        if (repo.summary?.isPrivate) {
+          if (!req.isAuthenticated()) {
+            return null;
+          }
+        }
+        
+        return {
+          id: repo.id,
+          owner: repo.owner,
+          name: repo.name,
+          createdAt: repo.createdAt,
+          summary: repo.summary,
+          fileCount: repo.fileCount,
+          sizeInBytes: repo.sizeInBytes
+        };
+      })
+      .filter(Boolean) // Remove null entries (private repos for unauthenticated users)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // Sort by date, newest first
     
-    const repos = repoIds.map(id => {
-      const data = fs.readFileSync(`./data/repositories/${id}.json`, 'utf8');
-      return JSON.parse(data);
-    });
-    
-    // Sort by creation date (newest first)
-    repos.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    
-    res.json({ repositories: repos });
+    return res.json({ repositories });
   } catch (error) {
     console.error('Error fetching repositories:', error);
-    res.json({ repositories: repositories });
+    return res.status(500).json({ error: 'Failed to fetch repositories' });
+  }
+});
+
+// Add a new endpoint to fetch user's GitHub repositories
+app.get('/api/user/repositories', async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  try {
+    const githubClient = createGitHubClient(req);
+    const response = await githubClient.get('/user/repos?sort=updated&per_page=100');
+    
+    const repositories = response.data.map(repo => ({
+      id: repo.id,
+      name: repo.name,
+      fullName: repo.full_name,
+      owner: repo.owner.login,
+      description: repo.description,
+      language: repo.language,
+      stars: repo.stargazers_count,
+      forks: repo.forks_count,
+      isPrivate: repo.private,
+      updatedAt: repo.updated_at
+    }));
+    
+    return res.json({ repositories });
+  } catch (error) {
+    console.error('Error fetching user repositories:', error.message);
+    return res.status(500).json({ error: 'Failed to fetch user repositories' });
   }
 });
 
@@ -693,7 +874,7 @@ app.get('/api/generate-native-app/:id/download', async (req, res) => {
         
         // Clean up the content
         let content = fileMatch
-          .replace(/```swift\s*(?:\/\/\s*[^]+?\.swift\s*)?/, '')
+          .replace(/```swift\s*(?:\/\/\s*[^]+?\.swift)?/, '')
           .replace(/```$/, '')
           .trim();
         
