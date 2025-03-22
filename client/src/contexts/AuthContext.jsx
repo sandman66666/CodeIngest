@@ -58,15 +58,12 @@ export const AuthProvider = ({ children }) => {
 
   // Login via GitHub OAuth (redirects to GitHub)
   const loginWithGitHub = () => {
-    // Get the current URL to use as returnTo
-    const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
-    
     // Use the full URL to ensure we match exactly what's registered in GitHub
     if (window.location.hostname === 'localhost') {
-      window.location.href = `http://localhost:3000/auth/github?returnTo=${returnUrl}`;
+      window.location.href = 'http://localhost:3000/auth/github';
     } else {
       // Use absolute URL in production to ensure callback matches exactly
-      window.location.href = `https://codanalyzer-49ec21ea6aca.herokuapp.com/auth/github?returnTo=${returnUrl}`;
+      window.location.href = 'https://codanalyzer-49ec21ea6aca.herokuapp.com/auth/github';
     }
   };
 

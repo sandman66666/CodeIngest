@@ -58,12 +58,11 @@ app.use(passport.session());
 passport.use(new GitHubStrategy({
   clientID: process.env.GITHUB_CLIENT_ID,
   clientSecret: process.env.GITHUB_CLIENT_SECRET,
-  callbackURL: process.env.GITHUB_CALLBACK_URL || 
-    (process.env.NODE_ENV === 'production' 
-      ? 'https://codanalyzer-49ec21ea6aca.herokuapp.com/auth/github/callback'
-      : 'http://localhost:3000/auth/github/callback'),
-  scope: ['user:email', 'repo'], // Request access to user's repositories
-  proxy: true // Important for Heroku's proxy setup
+  // Use a hard-coded callback URL in production to ensure exact match with GitHub settings
+  callbackURL: process.env.NODE_ENV === 'production'
+    ? 'https://codanalyzer-49ec21ea6aca.herokuapp.com/auth/github/callback'
+    : 'http://localhost:3000/auth/github/callback',
+  scope: ['user:email', 'repo'] // Request access to user's repositories
 },
 function(accessToken, refreshToken, profile, done) {
   // Store comprehensive user data
@@ -182,38 +181,16 @@ app.get('/auth/github', (req, res, next) => {
     req.session.returnTo = req.query.returnTo;
   }
   
-  // Log the authentication attempt in development
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('GitHub auth initiated, callback URL:', 
-      process.env.GITHUB_CALLBACK_URL || 
-      (process.env.NODE_ENV === 'production' 
-        ? 'https://codanalyzer-49ec21ea6aca.herokuapp.com/auth/github/callback'
-        : 'http://localhost:3000/auth/github/callback'));
-  }
-  
-  passport.authenticate('github', {
-    successReturnToOrRedirect: '/',
-    failureRedirect: '/?error=auth_failed'
-  })(req, res, next);
+  passport.authenticate('github')(req, res, next);
 });
 
 app.get('/auth/github/callback', 
-  (req, res, next) => {
-    // Log callback parameters in development
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('GitHub callback received:', req.url);
-    }
-    
-    passport.authenticate('github', { 
-      failureRedirect: '/?error=auth_failed',
-      failWithError: true
-    })(req, res, next);
-  },
+  passport.authenticate('github', { 
+    failureRedirect: '/?error=auth_failed',
+    failWithError: true
+  }),
   (req, res) => {
-    // Successful authentication
-    console.log('User authenticated successfully:', req.user.username);
-    
-    // Redirect to the intended URL or home
+    // Successful authentication, redirect to the intended URL or home
     const returnTo = req.session.returnTo || '/';
     delete req.session.returnTo;
     res.redirect(returnTo);
