@@ -530,8 +530,65 @@ app.post('/api/private-repositories', async (req, res) => {
       includesAllFiles: includeAllFiles
     };
     
-    // Fetch repository contents
-    await fetchRepositoryContents(githubClient, repository, owner, repo, '', includeAllFiles);
+    console.log(`Starting to fetch contents for ${owner}/${repo}`);
+    
+    // Get repository contents
+    const contents = await githubClient.get(`/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`);
+    
+    // Filter for important files based on extension
+    const filteredFiles = contents.data.tree
+      .filter(item => {
+        if (item.type !== 'blob') return false;
+        
+        // If includeAllFiles is true, include most files except binary/large files
+        if (includeAllFiles) {
+          return !isJsonIgnorableFile(item.path);
+        } 
+        
+        // Otherwise only include important files based on extension
+        const extension = path.extname(item.path);
+        return isImportantFile(item.path, extension);
+      })
+      .filter(item => item.size <= FILE_SIZE_LIMIT);
+    
+    console.log(`Found ${filteredFiles.length} important files to ingest`);
+    
+    // Fetch content for each file
+    for (const file of filteredFiles) {
+      try {
+        const fileResponse = await githubClient.get(`/repos/${owner}/${repo}/contents/${file.path}`);
+        let content = fileResponse.data.content;
+        
+        // GitHub API returns base64 encoded content
+        if (content) {
+          content = Buffer.from(content, 'base64').toString('utf-8');
+        }
+        
+        repository.files.push({
+          name: path.basename(file.path),
+          path: file.path,
+          content: content,
+          size: file.size,
+          extension: path.extname(file.path)
+        });
+      } catch (error) {
+        console.error(`Error fetching file ${file.path}:`, error.message);
+      }
+    }
+    
+    // Create a tree representation for display
+    const fileTree = buildFileTree(contents.data.tree);
+    repository.fileTree = fileTree;
+    
+    // Get README content if available
+    try {
+      const readmeResponse = await githubClient.get(`/repos/${owner}/${repo}/readme`);
+      const readmeContent = Buffer.from(readmeResponse.data.content, 'base64').toString('utf-8');
+      repository.readme = readmeContent;
+    } catch (error) {
+      console.log('No README found or error fetching README');
+      repository.readme = '';
+    }
     
     // Normalize files size and calculate total size
     repository.totalSize = repository.files.reduce((total, file) => total + file.size, 0);
@@ -1373,6 +1430,86 @@ function updateNativeAppStatus(repositoryId, status, swiftCode = null, error = n
     console.error(`Error updating native app status for repository ${repositoryId}:`, error);
   }
 }
+
+// Search GitHub repositories
+app.get('/api/search/repositories', async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const { query } = req.query;
+  
+  if (!query) {
+    return res.status(400).json({ error: 'Search query is required' });
+  }
+  
+  try {
+    const githubClient = createGitHubClient(req);
+    
+    // Search repositories the user has access to
+    const response = await githubClient.get('/search/repositories', {
+      params: {
+        q: `${query} user:${req.user.username}`,
+        per_page: 50,
+        sort: 'updated'
+      }
+    });
+    
+    const repositories = response.data.items.map(repo => ({
+      id: repo.id,
+      name: repo.name,
+      full_name: repo.full_name,
+      description: repo.description,
+      private: repo.private,
+      language: repo.language,
+      stars: repo.stargazers_count,
+      url: repo.html_url,
+      updated_at: repo.updated_at
+    }));
+    
+    res.json(repositories);
+  } catch (error) {
+    console.error('Error searching repositories:', error);
+    res.status(500).json({ error: 'Failed to search repositories' });
+  }
+});
+
+// Get user repositories
+app.get('/api/user/repositories', async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  try {
+    const githubClient = createGitHubClient(req);
+    
+    // Get user repositories (first 100)
+    const response = await githubClient.get('/user/repos', {
+      params: {
+        per_page: 100,
+        sort: 'updated',
+        affiliation: 'owner,collaborator,organization_member'
+      }
+    });
+    
+    const repositories = response.data.map(repo => ({
+      id: repo.id,
+      name: repo.name,
+      full_name: repo.full_name,
+      description: repo.description,
+      private: repo.private,
+      language: repo.language,
+      stars: repo.stargazers_count,
+      url: repo.html_url,
+      updated_at: repo.updated_at
+    }));
+    
+    res.json(repositories);
+  } catch (error) {
+    console.error('Error fetching user repositories:', error);
+    res.status(500).json({ error: 'Failed to fetch repositories' });
+  }
+});
 
 // Serve static files from the React build directory in production
 if (process.env.NODE_ENV === 'production') {

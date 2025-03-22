@@ -18,6 +18,9 @@ const Home = () => {
   const [githubRepos, setGithubRepos] = useState([]);
   const [showBrowseModal, setShowBrowseModal] = useState(false);
   const [loadingGithubRepos, setLoadingGithubRepos] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Fetch repositories on component mount
   useEffect(() => {
@@ -203,6 +206,42 @@ const Home = () => {
     }
   };
 
+  // Function to search GitHub repositories
+  const searchRepositories = async () => {
+    if (!isAuthenticated) {
+      setError('Please sign in with GitHub to search your repositories');
+      return;
+    }
+    
+    if (!searchQuery.trim()) {
+      setError('Please enter a search term');
+      return;
+    }
+    
+    setIsSearching(true);
+    setError(null);
+    
+    try {
+      const response = await axios.get('/api/search/repositories', {
+        params: { query: searchQuery }
+      });
+      
+      setSearchResults(response.data);
+      setActiveTab('search');
+    } catch (error) {
+      console.error('Error searching repositories:', error);
+      setError(error.response?.data?.error || 'Failed to search repositories');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Handle search form submission
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    searchRepositories();
+  };
+
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -296,6 +335,32 @@ const Home = () => {
             ) : 'Browse My Repositories'}
           </button>
         </form>
+        
+        <form onSubmit={handleSearchSubmit}>
+          <div className="input-group">
+            <label htmlFor="searchQuery">Search Repositories</label>
+            <input
+              type="text"
+              id="searchQuery"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search for repositories"
+              disabled={isSearching}
+            />
+          </div>
+          <button 
+            type="submit" 
+            className="button button-primary"
+            disabled={isSearching}
+          >
+            {isSearching ? (
+              <>
+                <span className="spinner"></span>
+                <span>Searching...</span>
+              </>
+            ) : 'Search'}
+          </button>
+        </form>
       </div>
       
       {/* Tabs for repository lists */}
@@ -313,6 +378,14 @@ const Home = () => {
               onClick={() => setActiveTab('github')}
             >
               Your GitHub Repositories
+            </button>
+          )}
+          {isAuthenticated && (
+            <button 
+              className={`tab ${activeTab === 'search' ? 'active' : ''}`}
+              onClick={() => setActiveTab('search')}
+            >
+              Search Results
             </button>
           )}
         </div>
@@ -377,6 +450,41 @@ const Home = () => {
             ) : (
               <div className="empty-state">
                 <p>No GitHub repositories found. If you just logged in, please wait a moment...</p>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Search results tab */}
+        {activeTab === 'search' && (
+          <div>
+            {searchResults.length > 0 ? (
+              <div className="repository-list">
+                {searchResults.map(repo => (
+                  <div 
+                    key={repo.id} 
+                    className="card repository-card"
+                  >
+                    <h3>{repo.fullName}</h3>
+                    <div className="repository-meta">
+                      <span>{repo.language || 'Unknown'}</span>
+                      <span>⭐ {repo.stars}</span>
+                      <span>Updated {formatDate(repo.updatedAt)}</span>
+                      {repo.isPrivate && <span className="private-tag">Private</span>}
+                    </div>
+                    <p className="repo-description">{repo.description || 'No description'}</p>
+                    <button 
+                      onClick={() => handleGitHubRepoIngest(repo)}
+                      className="button button-small"
+                    >
+                      Ingest This Repository
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <p>No search results found.</p>
               </div>
             )}
           </div>
