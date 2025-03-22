@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import SmartCodeExtractor from './SmartCodeExtractor';
+import NativeAppGenerator from './NativeAppGenerator';
 
 const RepositoryModal = ({ repository, onClose }) => {
   const [activeTab, setActiveTab] = useState('structure');
@@ -121,6 +122,12 @@ const RepositoryModal = ({ repository, onClose }) => {
           >
             Smart Extractor
           </div>
+          <div 
+            className={`tab ${activeTab === 'native-app' ? 'active' : ''}`}
+            onClick={() => setActiveTab('native-app')}
+          >
+            iOS App
+          </div>
         </div>
         
         <div className="modal-body">
@@ -172,6 +179,14 @@ const RepositoryModal = ({ repository, onClose }) => {
           <div className={`tab-content ${activeTab === 'extractor' ? 'active' : ''}`}>
             <SmartCodeExtractor
               repositoryId={fullRepo.id}
+            />
+          </div>
+          
+          <div className={`tab-content ${activeTab === 'native-app' ? 'active' : ''}`}>
+            <NativeAppGenerator
+              repositoryId={fullRepo.id}
+              hasGeneratedApp={!!fullRepo.nativeApp}
+              swiftCode={fullRepo.nativeApp?.swiftCode}
             />
           </div>
         </div>

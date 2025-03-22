@@ -536,6 +536,139 @@ For each extracted piece, include a brief comment explaining its purpose, but pr
   }
 });
 
+app.post('/api/generate-native-app/:id', async (req, res) => {
+  try {
+    // Find repository
+    let repository = null;
+    try {
+      const data = fs.readFileSync(`./data/repositories/${req.params.id}.json`, 'utf8');
+      repository = JSON.parse(data);
+    } catch (error) {
+      console.error(`Error loading repository ${req.params.id}:`, error);
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+    
+    // Check if it's likely a web app by looking for web-related patterns
+    const codeContent = repository.ingestedContent?.fullCode || '';
+    
+    const webAppPatterns = [
+      '<html', '<div', 'react', 'angular', 'vue', 'document.getElementById', 
+      'addEventListener', 'querySelector', 'innerHTML', 'fetch(', 'axios', 
+      'express', 'app.get', 'app.post', 'router.get', 'http.createServer'
+    ];
+    
+    let isWebApp = false;
+    for (const pattern of webAppPatterns) {
+      if (codeContent.toLowerCase().includes(pattern.toLowerCase())) {
+        isWebApp = true;
+        break;
+      }
+    }
+    
+    if (!isWebApp) {
+      return res.status(400).json({ 
+        error: 'This repository does not appear to be a web application. Only web apps can be converted to native iPhone apps.'
+      });
+    }
+    
+    // Use Claude API to generate Swift code
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Anthropic API key not configured on server' });
+    }
+    
+    // Configure Anthropic API client with updated headers
+    const headers = {
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01'
+    };
+    
+    // Add API key in the correct format
+    if (apiKey.startsWith('sk-ant-')) {
+      headers['x-api-key'] = apiKey;
+    } else {
+      headers['anthropic-api-key'] = apiKey;
+    }
+    
+    const anthropic = axios.create({
+      baseURL: 'https://api.anthropic.com',
+      headers
+    });
+    
+    // Get repository information
+    const repoOwner = repository.owner;
+    const repoName = repository.name;
+    const repoDescription = repository.summary?.description || '';
+    
+    // Create system prompt
+    const systemPrompt = `You are an expert iOS developer who specializes in converting web applications to native iOS apps using Swift and SwiftUI. 
+Your task is to analyze web application source code and generate equivalent iOS Swift code that implements the same functionality.`;
+    
+    // Log API request (excluding the full code content for brevity)
+    console.log('Sending request to Claude API for native app generation:');
+    console.log('- Model:', 'claude-3-5-sonnet-20240620');
+    console.log('- Repository:', `${repoOwner}/${repoName}`);
+    
+    // Send request to Claude API
+    const response = await anthropic.post('/v1/messages', {
+      model: "claude-3-5-sonnet-20240620",
+      max_tokens: 4000,
+      temperature: 0.5,
+      system: systemPrompt,
+      messages: [
+        {
+          role: "user",
+          content: `Convert this web application to a native iOS app using Swift and SwiftUI.
+
+Repository: ${repoOwner}/${repoName}
+Description: ${repoDescription}
+
+Here's the source code of the web application:
+
+${codeContent}
+
+Create Swift code for a native iOS app that implements the same core functionality as this web app. Include:
+
+1. Swift UI views that mirror the web app's UI components
+2. Model classes for all important data structures
+3. Controller/ViewModel code for business logic
+4. Network requests to replace any API calls in the web app
+5. Navigation structure that matches the web app flow
+6. State management similar to the web app
+
+Focus on creating a well-structured, modern Swift codebase that would be ready for implementation.
+Provide complete Swift files organized in a typical iOS project structure.`
+        }
+      ]
+    });
+    
+    // Extract the response content
+    const generatedSwiftCode = response.data.content[0].text;
+    
+    // Store the generated Swift code in the repository data
+    repository.nativeApp = {
+      generatedAt: new Date().toISOString(),
+      swiftCode: generatedSwiftCode
+    };
+    
+    // Save updated repository data
+    fs.writeFileSync(`./data/repositories/${req.params.id}.json`, JSON.stringify(repository, null, 2));
+    
+    return res.json({ 
+      success: true,
+      repository
+    });
+  } catch (error) {
+    console.error('Error generating native app:', error.message);
+    console.error('Error details:', error.response?.data);
+    
+    return res.status(error.response?.status || 500).json({ 
+      error: error.response?.data?.error?.message || 'Failed to generate native app code' 
+    });
+  }
+});
+
 // Serve static files from the React build directory in production
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, 'client/dist')));
