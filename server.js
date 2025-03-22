@@ -451,11 +451,19 @@ app.post('/api/extract/:id', async (req, res) => {
     const repoDescription = repository.summary.description || '';
     
     // Create prompt for Claude
-    const prompt = `
-Human: You are an expert code analyzer. I need you to analyze the following GitHub repository code and extract the core algorithms and key elements. 
-Focus on identifying and extracting the most important parts that someone would need to understand how this code works.
-Provide only the extracted code with brief comments explaining what each part does.
-
+    const systemPrompt = "You are an expert code analyzer. Extract the core algorithms and key elements from the provided code. Focus on the most important parts that help understand how the code works.";
+    
+    // Send request to Claude API
+    const response = await anthropic.post('/v1/messages', {
+      model: "claude-3-haiku-20240307",
+      max_tokens: 4000,
+      temperature: 0.5,
+      system: systemPrompt,
+      messages: [
+        {
+          role: "user",
+          content: `Analyze this GitHub repository code and extract the core algorithms and key elements.
+            
 Repository: ${repository.owner}/${repository.name}
 Description: ${repoDescription}
 
@@ -463,19 +471,13 @@ Here's the code:
 
 ${codeContent}
 
-Extract and present the core algorithms and key elements from this code.
-`;
-    
-    // Send prompt to Claude API
-    const response = await anthropic.post('/v1/complete', {
-      prompt,
-      model: "claude-2",
-      max_tokens_to_sample: 2048,
-      temperature: 0.7,
-      stop_sequences: ["Human:", "Assistant:"]
+Extract and present only the core algorithms and key elements from this code with brief comments explaining what each part does.`
+        }
+      ]
     });
     
-    const extractedCode = response.data.completion.trim();
+    // Extract the response content
+    const extractedCode = response.data.content[0].text;
     
     return res.json({ 
       success: true,
