@@ -182,6 +182,35 @@ function isJsonIgnorableFile(filePath) {
   return false;
 }
 
+// Define important file extensions globally
+const importantExtensions = [
+  '.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.rb', '.php',
+  '.go', '.rs', '.c', '.cpp', '.h', '.cs', '.swift', '.kt',
+  '.json', '.yaml', '.yml', '.md', '.sh', '.html', '.css', '.scss'
+];
+
+// Filter functions for important files
+const isImportantFile = (filePath, extension) => {
+  // Skip node_modules, .git directories, etc.
+  if (
+    filePath.includes('node_modules/') ||
+    filePath.includes('.git/') ||
+    filePath.includes('dist/') ||
+    filePath.includes('build/') ||
+    filePath.includes('.next/') ||
+    filePath.includes('.DS_Store')
+  ) {
+    return false;
+  }
+
+  // Extract extension from filePath if not provided
+  if (!extension) {
+    extension = path.extname(filePath);
+  }
+
+  return importantExtensions.includes(extension);
+};
+
 // Authentication Routes
 app.get('/auth/github', (req, res, next) => {
   // Store the intended return URL in session if available
@@ -301,35 +330,6 @@ const github = axios.create({
   }
 });
 
-// Filter functions for important files
-const isImportantFile = (filePath, extension) => {
-  // Skip node_modules, .git directories, etc.
-  if (
-    filePath.includes('node_modules/') ||
-    filePath.includes('.git/') ||
-    filePath.includes('dist/') ||
-    filePath.includes('build/') ||
-    filePath.includes('.next/') ||
-    filePath.includes('.DS_Store')
-  ) {
-    return false;
-  }
-
-  // Extract extension from filePath if not provided
-  if (!extension) {
-    extension = path.extname(filePath);
-  }
-
-  // Identify important file extensions for business logic
-  const importantExtensions = [
-    '.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.rb', '.php',
-    '.go', '.rs', '.c', '.cpp', '.h', '.cs', '.swift', '.kt',
-    '.json', '.yaml', '.yml', '.md', '.sh'
-  ];
-
-  return importantExtensions.includes(extension);
-};
-
 // Limit for the file size (in bytes) - 500KB
 const FILE_SIZE_LIMIT = 500 * 1024;
 
@@ -394,7 +394,8 @@ app.post('/api/public-repositories', async (req, res) => {
         } 
         
         // Otherwise only include important files based on extension
-        return isImportantFile(item.path);
+        const fileExtension = path.extname(item.path);
+        return importantExtensions.includes(fileExtension);
       })
       .filter(item => item.size <= FILE_SIZE_LIMIT);
     
@@ -560,7 +561,7 @@ app.post('/api/private-repositories', async (req, res) => {
         
         // Otherwise only include important files based on extension
         const extension = path.extname(item.path);
-        return isImportantFile(item.path, extension);
+        return importantExtensions.includes(extension);
       })
       .filter(item => item.size <= FILE_SIZE_LIMIT);
     

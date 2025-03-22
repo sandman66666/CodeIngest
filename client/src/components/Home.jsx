@@ -7,9 +7,13 @@ import { useAuth } from '../contexts/AuthContext';
 const Home = () => {
   const { isAuthenticated, user } = useAuth();
   const [url, setUrl] = useState('');
+  const [privateUrl, setPrivateUrl] = useState('');
   const [includeAllFiles, setIncludeAllFiles] = useState(false);
+  const [includeAllFilesPrivate, setIncludeAllFilesPrivate] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingPrivate, setLoadingPrivate] = useState(false);
   const [error, setError] = useState('');
+  const [errorPrivate, setErrorPrivate] = useState('');
   const [repositories, setRepositories] = useState([]);
   const [userRepositories, setUserRepositories] = useState([]);
   const [selectedRepo, setSelectedRepo] = useState(null);
@@ -246,6 +250,53 @@ const Home = () => {
     searchRepositories();
   };
 
+  // Function to handle private repository URL submission
+  const handlePrivateSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!privateUrl) {
+      setErrorPrivate('Please enter a repository URL');
+      return;
+    }
+    
+    if (!isAuthenticated) {
+      setErrorPrivate('You must be signed in to ingest private repositories');
+      return;
+    }
+    
+    setLoadingPrivate(true);
+    setErrorPrivate(null);
+    
+    try {
+      const endpoint = '/api/private-repositories';
+      
+      console.log(`Using private endpoint: ${endpoint} for URL: ${privateUrl}`);
+      
+      const response = await axios.post(endpoint, {
+        url: privateUrl,
+        includeAllFiles: includeAllFilesPrivate
+      });
+      
+      const repository = response.data.repository;
+      
+      // Add the new repository to the list
+      setRepositories(prevRepositories => [repository, ...prevRepositories]);
+      
+      // Clear the form
+      setPrivateUrl('');
+      setActiveTab('ingested');
+      
+      // Select the new repository and show modal
+      setSelectedRepo(repository);
+      setShowModal(true);
+    } catch (error) {
+      console.error('Private repository ingestion error:', error);
+      setErrorPrivate(error.response?.data?.error || 'Failed to ingest private repository');
+    } finally {
+      setLoadingPrivate(false);
+    }
+  };
+
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -271,13 +322,8 @@ const Home = () => {
       </div>
       
       <div className="card">
-        <h2>Ingest a New Repository</h2>
+        <h2>Ingest a Public Repository</h2>
         <p>Enter a GitHub repository URL to ingest its code for analysis.</p>
-        {isAuthenticated && (
-          <p className="auth-note">
-            You're signed in as <strong>{user.displayName}</strong> and can access your private repositories.
-          </p>
-        )}
         {!isAuthenticated && (
           <p className="auth-note">
             <i>Note: Sign in with GitHub to access your private repositories.</i>
@@ -288,7 +334,7 @@ const Home = () => {
         
         <form onSubmit={handleSubmit}>
           <div className="input-group">
-            <label htmlFor="repoUrl">GitHub Repository URL</label>
+            <label htmlFor="repoUrl">Public Repository URL</label>
             <input
               type="text"
               id="repoUrl"
@@ -322,7 +368,7 @@ const Home = () => {
                 <span className="spinner"></span>
                 <span>Ingesting...</span>
               </>
-            ) : 'Ingest Repository'}
+            ) : 'Ingest Public Repository'}
           </button>
           
           <button 
@@ -339,7 +385,62 @@ const Home = () => {
             ) : 'Browse My Repositories'}
           </button>
         </form>
-        
+      </div>
+      
+      {isAuthenticated && (
+        <div className="card">
+          <h2>Ingest a Private Repository</h2>
+          <p>Enter a GitHub private repository URL to ingest its code for analysis.</p>
+          <p className="auth-note">
+            You're signed in as <strong>{user.displayName}</strong> and can access your private repositories.
+          </p>
+          
+          {errorPrivate && <div className="alert alert-error">{errorPrivate}</div>}
+          
+          <form onSubmit={handlePrivateSubmit}>
+            <div className="input-group">
+              <label htmlFor="privateRepoUrl">Private Repository URL</label>
+              <input
+                type="text"
+                id="privateRepoUrl"
+                value={privateUrl}
+                onChange={(e) => setPrivateUrl(e.target.value)}
+                placeholder="https://github.com/username/private-repository"
+                disabled={loadingPrivate}
+              />
+            </div>
+            
+            <div className="checkbox-group">
+              <input
+                type="checkbox"
+                id="includeAllFilesPrivate"
+                checked={includeAllFilesPrivate}
+                onChange={(e) => setIncludeAllFilesPrivate(e.target.checked)}
+                disabled={loadingPrivate}
+              />
+              <label htmlFor="includeAllFilesPrivate">
+                Include all files (By default, only business logic and platform code is ingested)
+              </label>
+            </div>
+            
+            <button 
+              type="submit" 
+              className="button button-primary"
+              disabled={loadingPrivate}
+            >
+              {loadingPrivate ? (
+                <>
+                  <span className="spinner"></span>
+                  <span>Ingesting...</span>
+                </>
+              ) : 'Ingest Private Repository'}
+            </button>
+          </form>
+        </div>
+      )}
+      
+      <div className="card">
+        <h2>Search Repositories</h2>
         <form onSubmit={handleSearchSubmit}>
           <div className="input-group">
             <label htmlFor="searchQuery">Search Repositories</label>
