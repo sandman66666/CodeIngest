@@ -7,6 +7,7 @@ const NativeAppGenerator = ({ repositoryId, hasGeneratedApp, swiftCode }) => {
   const [generatedCode, setGeneratedCode] = useState(swiftCode || '');
   const [status, setStatus] = useState(hasGeneratedApp ? 'completed' : 'not_started');
   const [polling, setPolling] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   // Check status if already in progress
   useEffect(() => {
@@ -36,18 +37,18 @@ const NativeAppGenerator = ({ repositoryId, hasGeneratedApp, swiftCode }) => {
   const checkStatus = async () => {
     try {
       const response = await axios.get(`/api/generate-native-app/${repositoryId}/status`);
-      const { status: statusCode, swiftCode, error: statusError } = response.data;
+      const { status, swiftCode, error: statusError } = response.data;
       
-      setStatus(statusCode);
+      setStatus(status);
       
-      if (statusCode === 'completed' && swiftCode) {
+      if (status === 'completed' && swiftCode) {
         setGeneratedCode(swiftCode);
         setPolling(false);
-      } else if (statusCode === 'error') {
+      } else if (status === 'error') {
         setError(statusError || 'Failed to generate Swift code');
         setPolling(false);
         setLoading(false);
-      } else if (statusCode !== 'pending') {
+      } else if (status !== 'pending') {
         setPolling(false);
       }
     } catch (err) {
@@ -68,6 +69,24 @@ const NativeAppGenerator = ({ repositoryId, hasGeneratedApp, swiftCode }) => {
       const errorMessage = err.response?.data?.error || 'Failed to start native app generation';
       setError(errorMessage);
       setLoading(false);
+    }
+  };
+
+  const handleDownloadProject = async () => {
+    try {
+      setDownloading(true);
+      
+      // Use window.location to trigger a file download
+      window.location.href = `/api/generate-native-app/${repositoryId}/download`;
+      
+      // Reset downloading state after 3 seconds (enough time for download to start)
+      setTimeout(() => {
+        setDownloading(false);
+      }, 3000);
+    } catch (err) {
+      console.error('Error downloading project:', err);
+      setError('Failed to download Xcode project');
+      setDownloading(false);
     }
   };
 
@@ -111,15 +130,46 @@ const NativeAppGenerator = ({ repositoryId, hasGeneratedApp, swiftCode }) => {
           <div className="code-view">
             <pre>{generatedCode}</pre>
           </div>
-          <button
-            onClick={() => {
-              navigator.clipboard.writeText(generatedCode);
-              alert('Swift code copied to clipboard!');
-            }}
-            className="button button-outline copy-button"
-          >
-            Copy to Clipboard
-          </button>
+          
+          <div className="button-group">
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(generatedCode);
+                alert('Swift code copied to clipboard!');
+              }}
+              className="button button-outline copy-button"
+            >
+              Copy to Clipboard
+            </button>
+            
+            <button
+              onClick={handleDownloadProject}
+              disabled={downloading}
+              className="button button-primary download-button"
+            >
+              {downloading ? (
+                <>
+                  <span className="spinner"></span>
+                  <span>Preparing Download...</span>
+                </>
+              ) : 'Download Xcode Project'}
+            </button>
+          </div>
+          
+          <div className="xcode-instructions">
+            <h4>Opening in Xcode</h4>
+            <ol>
+              <li>Download and extract the zip file</li>
+              <li>Launch Xcode</li>
+              <li>Select "Open a project or file"</li>
+              <li>Navigate to the extracted folder</li>
+              <li>Open the .xcodeproj file</li>
+              <li>Build and run the app!</li>
+            </ol>
+            <p className="note">
+              Note: You may need to update the Bundle Identifier and set up your development team before building.
+            </p>
+          </div>
         </div>
       )}
     </div>

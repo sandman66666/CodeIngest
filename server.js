@@ -6,6 +6,8 @@ const dotenv = require('dotenv');
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const fs = require('fs');
+const archiver = require('archiver');
+const os = require('os');
 
 // Load environment variables
 dotenv.config();
@@ -633,6 +635,258 @@ app.get('/api/generate-native-app/:id/status', async (req, res) => {
     return res.status(500).json({ 
       error: 'Failed to check generation status' 
     });
+  }
+});
+
+// New endpoint to download Swift project as a zip file
+app.get('/api/generate-native-app/:id/download', async (req, res) => {
+  try {
+    // Find repository
+    let repository = null;
+    try {
+      const data = fs.readFileSync(`./data/repositories/${req.params.id}.json`, 'utf8');
+      repository = JSON.parse(data);
+    } catch (error) {
+      console.error(`Error loading repository ${req.params.id}:`, error);
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+    
+    // Check if native app code exists
+    if (!repository.nativeApp?.swiftCode || repository.nativeApp.status !== 'completed') {
+      return res.status(400).json({ error: 'Native app code has not been generated yet' });
+    }
+    
+    const swiftCode = repository.nativeApp.swiftCode;
+    const repoName = repository.name;
+    
+    // Create temporary directory for the Xcode project
+    const tempDir = path.join(os.tmpdir(), `${repoName}-iOS-${Date.now()}`);
+    fs.mkdirSync(tempDir, { recursive: true });
+    
+    // Create project directory structure
+    const projectDir = path.join(tempDir, `${repoName}App`);
+    fs.mkdirSync(projectDir, { recursive: true });
+    
+    // Standard iOS project directories
+    fs.mkdirSync(path.join(projectDir, 'Views'), { recursive: true });
+    fs.mkdirSync(path.join(projectDir, 'Models'), { recursive: true });
+    fs.mkdirSync(path.join(projectDir, 'ViewModels'), { recursive: true });
+    fs.mkdirSync(path.join(projectDir, 'Services'), { recursive: true });
+    fs.mkdirSync(path.join(projectDir, 'Utils'), { recursive: true });
+    
+    // Parse the Swift code to extract individual files
+    const fileMatches = swiftCode.match(/```swift\s*(?:\/\/\s*([^]+?)\.swift\s*)?([^]+?)```/g) || [];
+    
+    if (fileMatches.length === 0) {
+      // If no specific file blocks found, create a single App.swift file
+      fs.writeFileSync(path.join(projectDir, `${repoName}App.swift`), swiftCode.replace(/```swift|```/g, '').trim());
+    } else {
+      // Process each file match
+      for (let i = 0; i < fileMatches.length; i++) {
+        const fileMatch = fileMatches[i];
+        
+        // Extract filename and content
+        const filenameMatch = fileMatch.match(/```swift\s*(?:\/\/\s*([^]+?)\.swift)?/);
+        let filename = filenameMatch && filenameMatch[1] ? 
+          `${filenameMatch[1].trim()}.swift` : 
+          `File${i + 1}.swift`;
+        
+        // Clean up the content
+        let content = fileMatch
+          .replace(/```swift\s*(?:\/\/\s*[^]+?\.swift\s*)?/, '')
+          .replace(/```$/, '')
+          .trim();
+        
+        // Determine subdirectory based on filename
+        let subdir = '';
+        if (filename.includes('View') || filename.includes('Screen')) {
+          subdir = 'Views';
+        } else if (filename.includes('Model') && !filename.includes('ViewModel')) {
+          subdir = 'Models';
+        } else if (filename.includes('ViewModel') || filename.includes('Provider')) {
+          subdir = 'ViewModels';
+        } else if (filename.includes('Service') || filename.includes('Client') || filename.includes('API')) {
+          subdir = 'Services';
+        } else if (filename.includes('Helper') || filename.includes('Extension') || filename.includes('Util')) {
+          subdir = 'Utils';
+        }
+        
+        // Write the file to the appropriate directory
+        const filePath = path.join(projectDir, subdir, filename);
+        fs.writeFileSync(filePath, content);
+      }
+    }
+    
+    // Create the App file if it doesn't exist already
+    const appFilePath = path.join(projectDir, `${repoName}App.swift`);
+    if (!fs.existsSync(appFilePath)) {
+      const appFileContent = `import SwiftUI
+
+@main
+struct ${repoName}App: App {
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+        }
+    }
+}
+`;
+      fs.writeFileSync(appFilePath, appFileContent);
+    }
+    
+    // Create a basic ContentView if it doesn't exist
+    const hasContentView = fs.existsSync(path.join(projectDir, 'Views', 'ContentView.swift'));
+    if (!hasContentView) {
+      const contentViewPath = path.join(projectDir, 'Views', 'ContentView.swift');
+      const contentViewContent = `import SwiftUI
+
+struct ContentView: View {
+    var body: some View {
+        NavigationView {
+            VStack {
+                Text("Welcome to ${repoName}App")
+                    .font(.title)
+                    .padding()
+                Text("Open the project in Xcode to customize and build")
+                    .padding()
+            }
+            .navigationTitle("${repoName}App")
+        }
+    }
+}
+
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+    }
+}
+`;
+      fs.writeFileSync(contentViewPath, contentViewContent);
+    }
+    
+    // Create project.pbxproj file (minimal version)
+    const pbxprojDir = path.join(projectDir, `${repoName}App.xcodeproj`);
+    fs.mkdirSync(pbxprojDir, { recursive: true });
+    
+    // Create a .xcworkspace directory
+    const xcworkspaceDir = path.join(projectDir, `${repoName}App.xcworkspace`);
+    fs.mkdirSync(xcworkspaceDir, { recursive: true });
+    
+    // Create contents.xcworkspacedata file
+    const contentsXCWorkspaceData = `<?xml version="1.0" encoding="UTF-8"?>
+<Workspace
+   version = "1.0">
+   <FileRef
+      location = "self:">
+   </FileRef>
+</Workspace>
+`;
+    fs.writeFileSync(path.join(xcworkspaceDir, 'contents.xcworkspacedata'), contentsXCWorkspaceData);
+    
+    // Create a Package.swift file for Swift Package Manager
+    const packageSwiftContent = `// swift-tools-version:5.5
+import PackageDescription
+
+let package = Package(
+    name: "${repoName}App",
+    platforms: [
+        .iOS(.v15)
+    ],
+    products: [
+        .library(
+            name: "${repoName}App",
+            targets: ["${repoName}App"]),
+    ],
+    dependencies: [
+        // Dependencies here
+    ],
+    targets: [
+        .target(
+            name: "${repoName}App",
+            dependencies: []),
+        .testTarget(
+            name: "${repoName}AppTests",
+            dependencies: ["${repoName}App"]),
+    ]
+)
+`;
+    fs.writeFileSync(path.join(projectDir, 'Package.swift'), packageSwiftContent);
+    
+    // Create README.md with instructions
+    const readmeContent = `# ${repoName}App
+
+This iOS app was automatically generated from the web application "${repoName}" using the CodeIngest tool.
+
+## Opening in Xcode
+
+To open this project in Xcode:
+
+1. Launch Xcode
+2. Select "Open a project or file"
+3. Navigate to the extracted folder
+4. Open the \`${repoName}App.xcodeproj\` file
+
+## Project Structure
+
+- **Views/**: SwiftUI view components
+- **Models/**: Data models
+- **ViewModels/**: View models for business logic
+- **Services/**: API and other services
+- **Utils/**: Helper utilities and extensions
+
+## Building the App
+
+After opening in Xcode, you may need to:
+1. Update the Bundle Identifier
+2. Set up your development team
+3. Configure any required capabilities
+4. Click the Run button to build and run the app
+
+## Generated Code
+
+This is AI-generated code that attempts to match the functionality of the original web app.
+Some manual adjustments may be needed to ensure the app works correctly.
+`;
+    fs.writeFileSync(path.join(projectDir, 'README.md'), readmeContent);
+    
+    // Create a zip file
+    const zipPath = path.join(tempDir, `${repoName}App.zip`);
+    const output = fs.createWriteStream(zipPath);
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    
+    // Listen for all archive data to be written
+    const zipPromise = new Promise((resolve, reject) => {
+      output.on('close', resolve);
+      archive.on('error', reject);
+    });
+    
+    // Pipe archive data to the file
+    archive.pipe(output);
+    archive.directory(projectDir, `${repoName}App`);
+    await archive.finalize();
+    
+    // Wait for the zip to complete
+    await zipPromise;
+    
+    // Set appropriate headers
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename=${repoName}App.zip`);
+    
+    // Stream the file
+    fs.createReadStream(zipPath).pipe(res);
+    
+    // Clean up temporary directory after sending (asynchronously)
+    res.on('finish', () => {
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch (err) {
+        console.error('Error cleaning up temp directory:', err);
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error generating Xcode project:', error);
+    return res.status(500).json({ error: 'Failed to generate Xcode project' });
   }
 });
 
