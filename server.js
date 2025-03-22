@@ -50,9 +50,9 @@ app.use(passport.session());
 passport.use(new GitHubStrategy({
     clientID: process.env.GITHUB_CLIENT_ID,
     clientSecret: process.env.GITHUB_CLIENT_SECRET,
-    callbackURL: process.env.NODE_ENV === 'production'
+    callbackURL: process.env.GITHUB_CALLBACK_URL || (process.env.NODE_ENV === 'production'
       ? 'https://codanalyzer-49ec21ea6aca.herokuapp.com/auth/github/callback'
-      : 'http://localhost:3000/auth/github/callback',
+      : 'http://localhost:3000/auth/github/callback'),
     scope: ['user:email', 'repo'] // Request access to user's repositories
   },
   function(accessToken, refreshToken, profile, done) {
