@@ -58,7 +58,9 @@ const Home = () => {
     setLoading(true);
     
     try {
-      const response = await axios.post('/api/public-repositories', { 
+      // Use the private repositories endpoint when authenticated, public otherwise
+      const endpoint = isAuthenticated ? '/api/private-repositories' : '/api/public-repositories';
+      const response = await axios.post(endpoint, { 
         url,
         includeAllFiles
       });
