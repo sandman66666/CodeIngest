@@ -50,9 +50,12 @@ app.use(passport.session());
 passport.use(new GitHubStrategy({
     clientID: process.env.GITHUB_CLIENT_ID,
     clientSecret: process.env.GITHUB_CLIENT_SECRET,
-    callbackURL: process.env.GITHUB_CALLBACK_URL || (process.env.NODE_ENV === 'production'
-      ? 'https://codanalyzer-49ec21ea6aca.herokuapp.com/auth/github/callback'
-      : 'http://localhost:3000/auth/github/callback'),
+    // Ensure callback URL is exactly as registered in GitHub OAuth app settings
+    // with no trailing slashes
+    callbackURL: process.env.GITHUB_CALLBACK_URL || 
+      (process.env.NODE_ENV === 'production' 
+        ? 'https://codanalyzer-49ec21ea6aca.herokuapp.com/auth/github/callback'
+        : 'http://localhost:3000/auth/github/callback'),
     scope: ['user:email', 'repo'] // Request access to user's repositories
   },
   function(accessToken, refreshToken, profile, done) {
@@ -164,16 +167,46 @@ function isJsonIgnorableFile(filePath) {
 }
 
 // Authentication Routes
-app.get('/auth/github',
-  passport.authenticate('github'));
+app.get('/auth/github', (req, res, next) => {
+  // Store the intended return URL in session if available
+  if (req.query.returnTo) {
+    req.session.returnTo = req.query.returnTo;
+  }
+  
+  // Log the authentication attempt in development
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('GitHub auth initiated, callback URL:', 
+      process.env.GITHUB_CALLBACK_URL || 
+      (process.env.NODE_ENV === 'production' 
+        ? 'https://codanalyzer-49ec21ea6aca.herokuapp.com/auth/github/callback'
+        : 'http://localhost:3000/auth/github/callback'));
+  }
+  
+  passport.authenticate('github')(req, res, next);
+});
 
 app.get('/auth/github/callback', 
-  passport.authenticate('github', { 
-    failureRedirect: '/' 
-  }),
-  function(req, res) {
-    // Successful authentication, redirect home
-    res.redirect('/');
+  (req, res, next) => {
+    // Log callback parameters in development
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('GitHub callback received:', req.url);
+    }
+    
+    passport.authenticate('github', { 
+      failureRedirect: '/',
+      failWithError: true
+    })(req, res, next);
+  },
+  (req, res) => {
+    // Successful authentication, redirect to the intended URL or home
+    const returnTo = req.session.returnTo || '/';
+    delete req.session.returnTo;
+    res.redirect(returnTo);
+  },
+  (err, req, res, next) => {
+    // Authentication error handler
+    console.error('GitHub authentication error:', err);
+    res.redirect('/?error=auth_failed');
   }
 );
 
@@ -1088,6 +1121,24 @@ Some manual adjustments may be needed to ensure the app works correctly.
   } catch (error) {
     console.error('Error generating Xcode project:', error);
     return res.status(500).json({ error: 'Failed to generate Xcode project' });
+  }
+});
+
+// Debug information for callback URL
+app.get('/auth/debug', (req, res) => {
+  // Only show in development or if explicitly allowed
+  if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEBUG === 'true') {
+    res.json({
+      environment: process.env.NODE_ENV || 'development',
+      callbackURL: process.env.GITHUB_CALLBACK_URL || 
+        (process.env.NODE_ENV === 'production' 
+          ? 'https://codanalyzer-49ec21ea6aca.herokuapp.com/auth/github/callback'
+          : 'http://localhost:3000/auth/github/callback'),
+      clientIDConfigured: !!process.env.GITHUB_CLIENT_ID,
+      clientSecretConfigured: !!process.env.GITHUB_CLIENT_SECRET
+    });
+  } else {
+    res.status(404).send('Not available in production');
   }
 });
 
