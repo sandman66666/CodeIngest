@@ -5,27 +5,17 @@ const SmartCodeExtractor = ({ repositoryId }) => {
   const [extractedCode, setExtractedCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showApiKeyInput, setShowApiKeyInput] = useState(true);
-  const [apiKey, setApiKey] = useState('');
 
   const handleExtract = async () => {
-    if (!apiKey) {
-      setError('Claude API key is required for extraction');
-      setShowApiKeyInput(true);
-      return;
-    }
-
     setLoading(true);
     setError('');
     
     try {
-      const response = await axios.post(`/api/extract/${repositoryId}`, { 
-        apiKey
-      });
-      
+      const response = await axios.post(`/api/extract/${repositoryId}`);
       setExtractedCode(response.data.extractedCode);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to extract code elements');
+      console.error('Details:', err.response?.data?.details);
     } finally {
       setLoading(false);
     }
@@ -41,21 +31,6 @@ const SmartCodeExtractor = ({ repositoryId }) => {
       </p>
       
       {error && <div className="alert alert-error">{error}</div>}
-      
-      <div className="api-key-input">
-        <label htmlFor="claude-api-key">Claude API Key</label>
-        <input
-          id="claude-api-key"
-          type="password"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          placeholder="sk-ant-api..."
-          className="input-field"
-        />
-        <div className="input-help" style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.25rem' }}>
-          Your API key is used only for this request and is not stored on the server.
-        </div>
-      </div>
       
       <button 
         onClick={handleExtract} 

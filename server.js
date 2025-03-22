@@ -416,10 +416,11 @@ app.post('/api/repositories/:id/additional-files', async (req, res) => {
 });
 
 app.post('/api/extract/:id', async (req, res) => {
-  const { apiKey } = req.body;
+  // Use environment variable for API key
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   
   if (!apiKey) {
-    return res.status(400).json({ error: 'Claude API key is required' });
+    return res.status(500).json({ error: 'Anthropic API key not configured on server' });
   }
   
   try {
@@ -467,7 +468,7 @@ app.post('/api/extract/:id', async (req, res) => {
     // Log API request (excluding the full code content for brevity)
     console.log('Sending request to Claude API with:');
     console.log('- Model:', 'claude-3-5-sonnet-20240620');
-    console.log('- Headers:', JSON.stringify(headers, null, 2));
+    console.log('- Headers:', JSON.stringify({...headers, 'x-api-key': '***REDACTED***'}, null, 2));
     console.log('- System prompt:', systemPrompt);
     
     // Send request to Claude API
@@ -506,8 +507,22 @@ Extract and present only the core algorithms and key elements from this code wit
     console.error('Error status:', error.response?.status);
     console.error('Error headers:', error.response?.headers);
     
-    return res.status(error.response?.status || 500).json({ 
-      error: error.response?.data?.message || 'Failed to extract code' 
+    // Check for specific error types and provide more user-friendly messages
+    let errorMessage = 'Failed to extract code';
+    let statusCode = error.response?.status || 500;
+    
+    if (error.response?.data?.error?.type === 'authentication_error') {
+      errorMessage = 'Invalid API key. The server\'s Claude API key is not valid.';
+      statusCode = 401;
+    } else if (error.response?.data?.error?.type === 'invalid_request_error' && 
+               error.response?.data?.error?.message?.includes('credit balance is too low')) {
+      errorMessage = 'The server\'s Claude API account has insufficient credits.';
+      statusCode = 402; // Payment Required
+    }
+    
+    return res.status(statusCode).json({ 
+      error: errorMessage,
+      details: error.response?.data?.error?.message
     });
   }
 });
