@@ -53,34 +53,42 @@ const Home = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
     
     if (!url) {
-      setError('GitHub repository URL is required');
+      setError('Please enter a repository URL');
       return;
     }
     
     setLoading(true);
+    setError(null);
     
     try {
-      // Use the private repositories endpoint when authenticated, public otherwise
-      const endpoint = isAuthenticated ? '/api/private-repositories' : '/api/public-repositories';
-      const response = await axios.post(endpoint, { 
+      // Choose endpoint based on authentication status
+      const endpoint = isAuthenticated 
+        ? '/api/private-repositories' 
+        : '/api/public-repositories';
+      
+      console.log(`Using endpoint: ${endpoint} for URL: ${url} (isAuthenticated: ${isAuthenticated})`);
+      
+      const response = await axios.post(endpoint, {
         url,
         includeAllFiles
       });
       
+      const repository = response.data.repository;
+      
       // Add the new repository to the list
-      setRepositories(prev => [response.data.repository, ...prev]);
+      setRepositories(prevRepositories => [repository, ...prevRepositories]);
+      
+      // Clear the form
+      setUrl('');
+      setActiveTab('ingested');
       
       // Select the new repository and show modal
-      setSelectedRepo(response.data.repository);
+      setSelectedRepo(repository);
       setShowModal(true);
-      
-      // Reset form
-      setUrl('');
-      setIncludeAllFiles(false);
     } catch (error) {
+      console.error('Repository ingestion error:', error);
       setError(error.response?.data?.error || 'Failed to ingest repository');
     } finally {
       setLoading(false);
@@ -105,7 +113,10 @@ const Home = () => {
     try {
       const repoUrl = `https://github.com/${repo.fullName}`;
       // Use authenticated endpoint for user's repositories
-      const response = await axios.post('/api/private-repositories', { 
+      const endpoint = '/api/private-repositories';
+      console.log(`Using endpoint: ${endpoint} for GitHub repository: ${repoUrl} (isAuthenticated: ${isAuthenticated})`);
+      
+      const response = await axios.post(endpoint, { 
         url: repoUrl,
         repoFullName: repo.fullName,
         includeAllFiles
@@ -121,6 +132,7 @@ const Home = () => {
       // Switch to ingested tab
       setActiveTab('ingested');
     } catch (error) {
+      console.error('GitHub repository ingestion error:', error);
       setError(error.response?.data?.error || 'Failed to ingest repository');
     } finally {
       setLoading(false);

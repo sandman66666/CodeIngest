@@ -20,14 +20,23 @@ export const AuthProvider = ({ children }) => {
         // Configure axios to send cookies with requests
         axios.defaults.withCredentials = true;
         
+        console.log('Checking authentication status...');
         const response = await axios.get('/auth/user');
+        console.log('Auth response:', response.data);
         
         if (response.data.isAuthenticated) {
+          console.log('User is authenticated:', response.data.user);
           setUser(response.data.user);
           setIsAuthenticated(true);
+        } else {
+          console.log('User is not authenticated');
+          setUser(null);
+          setIsAuthenticated(false);
         }
       } catch (error) {
         console.error('Auth check failed:', error);
+        setUser(null);
+        setIsAuthenticated(false);
       } finally {
         setLoading(false);
       }

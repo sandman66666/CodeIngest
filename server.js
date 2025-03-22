@@ -26,7 +26,9 @@ app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? 'https://codanalyzer-49ec21ea6aca.herokuapp.com' 
     : 'http://localhost:3001',
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 app.use(morgan('dev'));
@@ -38,6 +40,7 @@ app.use(session({
   saveUninitialized: false,
   cookie: { 
     secure: process.env.NODE_ENV === 'production', 
+    sameSite: 'lax',
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
 }));
