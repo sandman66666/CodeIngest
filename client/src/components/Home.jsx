@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import RepositoryModal from './RepositoryModal';
 import LoginButton from './LoginButton';
@@ -15,6 +15,9 @@ const Home = () => {
   const [selectedRepo, setSelectedRepo] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [activeTab, setActiveTab] = useState('ingested');
+  const [githubRepos, setGithubRepos] = useState([]);
+  const [showBrowseModal, setShowBrowseModal] = useState(false);
+  const [loadingGithubRepos, setLoadingGithubRepos] = useState(false);
 
   // Fetch repositories on component mount
   useEffect(() => {
@@ -139,6 +142,67 @@ const Home = () => {
     }
   };
 
+  // Function to load GitHub repositories
+  const loadGithubRepositories = async () => {
+    if (!isAuthenticated) {
+      setError('Please sign in with GitHub to browse your repositories');
+      return;
+    }
+    
+    setLoadingGithubRepos(true);
+    setError(null);
+    
+    try {
+      const response = await axios.get('/api/user/repositories');
+      setGithubRepos(response.data.repositories);
+      setShowBrowseModal(true);
+    } catch (error) {
+      console.error('Error loading GitHub repositories:', error);
+      setError(error.response?.data?.error || 'Failed to load your GitHub repositories');
+    } finally {
+      setLoadingGithubRepos(false);
+    }
+  };
+
+  // Handle selecting a repository from the browse modal
+  const handleRepositorySelect = (repo) => {
+    setShowBrowseModal(false);
+    ingestGithubRepository(repo);
+  };
+
+  const ingestGithubRepository = async (repo) => {
+    setError('');
+    setLoading(true);
+    
+    try {
+      const repoUrl = `https://github.com/${repo.fullName}`;
+      // Use authenticated endpoint for user's repositories
+      const endpoint = '/api/private-repositories';
+      console.log(`Using endpoint: ${endpoint} for GitHub repository: ${repoUrl} (isAuthenticated: ${isAuthenticated})`);
+      
+      const response = await axios.post(endpoint, { 
+        url: repoUrl,
+        repoFullName: repo.fullName,
+        includeAllFiles
+      });
+      
+      // Add the new repository to the list
+      setRepositories(prev => [response.data.repository, ...prev]);
+      
+      // Select the new repository and show modal
+      setSelectedRepo(response.data.repository);
+      setShowModal(true);
+      
+      // Switch to ingested tab
+      setActiveTab('ingested');
+    } catch (error) {
+      console.error('GitHub repository ingestion error:', error);
+      setError(error.response?.data?.error || 'Failed to ingest repository');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -216,6 +280,20 @@ const Home = () => {
                 <span>Ingesting...</span>
               </>
             ) : 'Ingest Repository'}
+          </button>
+          
+          <button 
+            type="button" 
+            className="button button-secondary"
+            disabled={loading || loadingGithubRepos}
+            onClick={loadGithubRepositories}
+          >
+            {loadingGithubRepos ? (
+              <>
+                <span className="spinner"></span>
+                <span>Loading...</span>
+              </>
+            ) : 'Browse My Repositories'}
           </button>
         </form>
       </div>
@@ -305,11 +383,49 @@ const Home = () => {
         )}
       </div>
       
+      {/* Repository details modal */}
       {showModal && selectedRepo && (
-        <RepositoryModal
-          repository={selectedRepo}
-          onClose={() => setShowModal(false)}
+        <RepositoryModal 
+          repository={selectedRepo} 
+          onClose={() => setShowModal(false)} 
         />
+      )}
+      
+      {/* Browse Repositories Modal */}
+      {showBrowseModal && (
+        <div className="modal-overlay">
+          <div className="modal browse-modal">
+            <div className="modal-header">
+              <h2>Your GitHub Repositories</h2>
+              <button className="close-button" onClick={() => setShowBrowseModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              {githubRepos.length > 0 ? (
+                <div className="repository-list">
+                  {githubRepos.map(repo => (
+                    <div 
+                      key={repo.id} 
+                      className="card repository-card"
+                      onClick={() => handleRepositorySelect(repo)}
+                    >
+                      <div className="repository-info">
+                        <h3>{repo.name}</h3>
+                        <p className="description">{repo.description || 'No description'}</p>
+                        <div className="repository-meta">
+                          <span>{repo.language || 'Unknown'}</span>
+                          <span>★ {repo.stars}</span>
+                          <span>{repo.isPrivate ? '🔒 Private' : '🌐 Public'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p>No repositories found</p>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

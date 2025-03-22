@@ -317,6 +317,7 @@ const FILE_SIZE_LIMIT = 500 * 1024;
 
 // API Routes
 app.post('/api/public-repositories', async (req, res) => {
+  console.log('Processing /api/public-repositories request:', req.body);
   try {
     const { url, includeAllFiles } = req.body;
     
@@ -337,6 +338,8 @@ app.post('/api/public-repositories', async (req, res) => {
     
     // Use authenticated client if user is logged in, otherwise use unauthenticated client
     const githubClient = req.isAuthenticated() ? createGitHubClient(req) : createUnauthenticatedGitHubClient();
+    
+    console.log(`Ingesting repository: ${owner}/${repo}, authenticated: ${req.isAuthenticated()}`);
     
     // Check if repository exists and is accessible
     let repoData;
@@ -736,11 +739,7 @@ app.post('/api/repositories/:id/additional-files', async (req, res) => {
       JSON.stringify(repository, null, 2)
     );
     
-    // Update in-memory store if present
-    const repoIndex = repositories.findIndex(repo => repo.id === repository.id);
-    if (repoIndex !== -1) {
-      repositories[repoIndex] = repository;
-    }
+    console.log(`Repository ${repository.id} updated with additional files`);
     
     return res.json({ 
       success: true,
