@@ -740,7 +740,7 @@ app.post('/api/repositories/:id/additional-files', async (req, res) => {
     if (repository.isPrivate && req.isAuthenticated()) {
       github = createGitHubClient(req);
     } else {
-      github = createPublicGitHubClient();
+      github = createUnauthenticatedGitHubClient();
     }
     
     // Re-fetch with all files included

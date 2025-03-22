@@ -12,7 +12,7 @@ const RepositoryModal = ({ repository, onClose }) => {
 
   useEffect(() => {
     // If we don't have the full repository data, fetch it
-    if (!repository.ingestedContent) {
+    if (!repository.files) {
       fetchFullRepository();
     } else {
       setFullRepo(repository);
@@ -33,7 +33,7 @@ const RepositoryModal = ({ repository, onClose }) => {
   };
 
   const handleLoadAdditionalFiles = async () => {
-    if (fullRepo?.ingestedContent?.allFilesIncluded) {
+    if (fullRepo?.includesAllFiles) {
       return; // Already have all files
     }
 
@@ -133,7 +133,7 @@ const RepositoryModal = ({ repository, onClose }) => {
         <div className="modal-body">
           {error && <div className="alert alert-error">{error}</div>}
           
-          {!fullRepo.ingestedContent?.allFilesIncluded && (
+          {!fullRepo.includesAllFiles && (
             <div className="alert" style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
               <p>
                 Currently viewing only business logic and platform code files. 
@@ -156,20 +156,22 @@ const RepositoryModal = ({ repository, onClose }) => {
           
           <div className={`tab-content ${activeTab === 'structure' ? 'active' : ''}`}>
             <div className="tree-view">
-              {fullRepo.ingestedContent?.tree || 'No folder structure available'}
+              {fullRepo.fileTree || 'No folder structure available'}
             </div>
           </div>
           
           <div className={`tab-content ${activeTab === 'code' ? 'active' : ''}`}>
             <div className="code-view">
-              <pre>{fullRepo.ingestedContent?.fullCode || 'No code content available'}</pre>
+              <pre>{fullRepo.files && fullRepo.files.length > 0 
+                ? fullRepo.files.map(file => `// File: ${file.path}\n${file.content || '(Binary file or content unavailable)'}\n\n`).join('\n')
+                : 'No code content available'}</pre>
             </div>
           </div>
           
           <div className={`tab-content ${activeTab === 'readme' ? 'active' : ''}`}>
             <div className="readme-view">
-              {fullRepo.ingestedContent?.readme ? (
-                <pre>{fullRepo.ingestedContent.readme}</pre>
+              {fullRepo.readme ? (
+                <pre>{fullRepo.readme}</pre>
               ) : (
                 <p>No README file found in this repository.</p>
               )}
