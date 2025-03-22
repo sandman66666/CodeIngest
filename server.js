@@ -4,6 +4,8 @@ const morgan = require('morgan');
 const path = require('path');
 const dotenv = require('dotenv');
 const { v4: uuidv4 } = require('uuid');
+const axios = require('axios');
+const fs = require('fs');
 
 // Load environment variables
 dotenv.config();
@@ -19,11 +21,54 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
-// Mock repositories data store (in a real app, this would be a database)
+// Create a data directory for storing repositories
+if (!fs.existsSync('./data')) {
+  fs.mkdirSync('./data');
+}
+if (!fs.existsSync('./data/repositories')) {
+  fs.mkdirSync('./data/repositories');
+}
+
+// In-memory repository store (in production, use a database)
 const repositories = [];
 
+// GitHub API client
+const github = axios.create({
+  baseURL: 'https://api.github.com',
+  headers: {
+    Accept: 'application/vnd.github.v3+json'
+  }
+});
+
+// Filter functions for important files
+const isImportantFile = (filePath, extension) => {
+  // Skip node_modules, .git directories, etc.
+  if (
+    filePath.includes('node_modules/') ||
+    filePath.includes('.git/') ||
+    filePath.includes('dist/') ||
+    filePath.includes('build/') ||
+    filePath.includes('.next/') ||
+    filePath.includes('.DS_Store')
+  ) {
+    return false;
+  }
+
+  // Identify important file extensions for business logic
+  const importantExtensions = [
+    '.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.rb', '.php',
+    '.go', '.rs', '.c', '.cpp', '.h', '.cs', '.swift', '.kt',
+    '.json', '.yaml', '.yml', '.md', '.sh'
+  ];
+
+  return importantExtensions.includes(extension);
+};
+
+// Limit for the file size (in bytes) - 500KB
+const FILE_SIZE_LIMIT = 500 * 1024;
+
 // API Routes
-app.post('/api/public-repositories', (req, res) => {
+app.post('/api/public-repositories', async (req, res) => {
   try {
     const { url, includeAllFiles } = req.body;
     
@@ -41,69 +86,210 @@ app.post('/api/public-repositories', (req, res) => {
     
     const [, owner, name] = match;
     
-    // Create a mock repository object
+    // Fetch repository metadata from GitHub
+    const repoResponse = await github.get(`/repos/${owner}/${name}`);
+    const repo = repoResponse.data;
+    
+    // Fetch repository tree recursively to get all files
+    const treeResponse = await github.get(`/repos/${owner}/${name}/git/trees/${repo.default_branch}?recursive=1`);
+    const tree = treeResponse.data;
+    
+    if (tree.truncated) {
+      console.warn('Repository tree is truncated due to size');
+    }
+    
+    // Format the tree for display
+    let formattedTree = '';
+    const fileEntries = {};
+    let fileCount = 0;
+    let totalSize = 0;
+    
+    // Process files
+    for (const item of tree.tree) {
+      // Skip directories
+      if (item.type === 'tree') continue;
+      
+      // Get file extension
+      const extension = path.extname(item.path);
+      
+      // Check if file should be included based on filter
+      if (!includeAllFiles && !isImportantFile(item.path, extension)) {
+        continue;
+      }
+      
+      // Skip files that are too large
+      if (item.size > FILE_SIZE_LIMIT) {
+        console.warn(`Skipping large file: ${item.path} (${item.size} bytes)`);
+        continue;
+      }
+      
+      fileEntries[item.path] = item;
+      fileCount++;
+      totalSize += item.size || 0;
+    }
+    
+    // Build formatted tree for display
+    const pathSegments = Object.keys(fileEntries).sort();
+    
+    let currentIndent = '';
+    let lastPathParts = [];
+    
+    for (const filePath of pathSegments) {
+      const parts = filePath.split('/');
+      
+      // Calculate the common part with the last path
+      let commonPathLength = 0;
+      if (lastPathParts.length > 0) {
+        for (let i = 0; i < Math.min(parts.length - 1, lastPathParts.length - 1); i++) {
+          if (parts[i] === lastPathParts[i]) {
+            commonPathLength = i + 1;
+          } else {
+            break;
+          }
+        }
+      }
+      
+      // Add directories that are different from the last path
+      for (let i = commonPathLength; i < parts.length - 1; i++) {
+        const indent = '│   '.repeat(i);
+        formattedTree += `${indent}├── ${parts[i]}/\n`;
+      }
+      
+      // Add the file
+      const fileIndent = '│   '.repeat(parts.length - 1);
+      formattedTree += `${fileIndent}├── ${parts[parts.length - 1]}\n`;
+      
+      lastPathParts = parts;
+    }
+    
+    // Try to fetch the README file
+    let readme = null;
+    const readmeFile = Object.keys(fileEntries).find(path => 
+      path.toLowerCase().includes('readme.md') || path.toLowerCase() === 'readme'
+    );
+    
+    if (readmeFile) {
+      try {
+        const readmeResponse = await github.get(
+          `/repos/${owner}/${name}/contents/${readmeFile}`,
+          { headers: { Accept: 'application/vnd.github.raw' } }
+        );
+        readme = readmeResponse.data;
+      } catch (err) {
+        console.error(`Error fetching README: ${err.message}`);
+      }
+    }
+    
+    // Get the full code for important files
+    let fullCode = '';
+    const maxFilesToInclude = 10; // Limit the number of files to include in the code view
+    let filesAdded = 0;
+    
+    for (const filePath of pathSegments) {
+      if (filesAdded >= maxFilesToInclude) break;
+      
+      const extension = path.extname(filePath);
+      // Only include code files, not assets, etc.
+      const codeExtensions = ['.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.rb', '.php', '.go', '.rs', '.c', '.cpp'];
+      
+      if (codeExtensions.includes(extension)) {
+        try {
+          const contentResponse = await github.get(
+            `/repos/${owner}/${name}/contents/${filePath}`,
+            { headers: { Accept: 'application/vnd.github.raw' } }
+          );
+          
+          fullCode += `// File: ${filePath}\n\n`;
+          fullCode += contentResponse.data;
+          fullCode += '\n\n' + '='.repeat(80) + '\n\n';
+          
+          filesAdded++;
+        } catch (err) {
+          console.error(`Error fetching file ${filePath}: ${err.message}`);
+        }
+      }
+    }
+    
+    // Create repository object
     const repository = {
       id: uuidv4(),
       url,
       owner,
       name,
-      fileCount: Math.floor(Math.random() * 100) + 20,
-      sizeInBytes: Math.floor(Math.random() * 5000000) + 1000000,
+      fileCount,
+      sizeInBytes: totalSize,
       createdAt: new Date().toISOString(),
       summary: {
-        language: ['JavaScript', 'TypeScript', 'Python', 'Go', 'Ruby'][Math.floor(Math.random() * 5)]
+        language: repo.language,
+        stars: repo.stargazers_count,
+        forks: repo.forks_count,
+        description: repo.description
       },
       ingestedContent: {
         allFilesIncluded: includeAllFiles,
-        tree: `
-├── src/
-│   ├── components/
-│   │   ├── App.jsx
-│   │   ├── Header.jsx
-│   │   └── Footer.jsx
-│   ├── utils/
-│   │   └── helpers.js
-│   └── index.js
-├── tests/
-│   └── app.test.js
-├── package.json
-└── README.md
-        `,
-        fullCode: `// Sample code for ${owner}/${name}
-import React from 'react';
-import ReactDOM from 'react-dom';
-import App from './components/App';
-
-ReactDOM.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-  document.getElementById('root')
-);
-        `,
-        readme: `# ${name}\n\nA sample repository created by ${owner}.\n\n## Features\n\n- Feature 1\n- Feature 2\n- Feature 3\n\n## Installation\n\n\`\`\`bash\nnpm install\nnpm start\n\`\`\``
+        tree: formattedTree,
+        fullCode,
+        readme
       }
     };
     
     // Add to in-memory store
     repositories.unshift(repository);
     
+    // Save to file system (in production, use a database)
+    fs.writeFileSync(
+      `./data/repositories/${repository.id}.json`, 
+      JSON.stringify(repository, null, 2)
+    );
+    
     return res.status(201).json({ 
       success: true,
       repository
     });
   } catch (error) {
-    console.error('Error ingesting repository:', error);
-    return res.status(500).json({ error: 'Failed to ingest repository' });
+    console.error('Error ingesting repository:', error.message);
+    return res.status(error.response?.status || 500).json({ 
+      error: error.response?.data?.message || 'Failed to ingest repository' 
+    });
   }
 });
 
 app.get('/api/repositories', (req, res) => {
-  res.json({ repositories });
+  // In a real app, this would fetch from a database
+  // For now, reading from filesystem
+  try {
+    const repoIds = fs.readdirSync('./data/repositories')
+      .filter(file => file.endsWith('.json'))
+      .map(file => file.replace('.json', ''));
+    
+    const repos = repoIds.map(id => {
+      const data = fs.readFileSync(`./data/repositories/${id}.json`, 'utf8');
+      return JSON.parse(data);
+    });
+    
+    // Sort by creation date (newest first)
+    repos.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    res.json({ repositories: repos });
+  } catch (error) {
+    console.error('Error fetching repositories:', error);
+    res.json({ repositories: repositories });
+  }
 });
 
 app.get('/api/repositories/:id', (req, res) => {
-  const repository = repositories.find(repo => repo.id === req.params.id);
+  // Try to find repository in memory first
+  let repository = repositories.find(repo => repo.id === req.params.id);
+  
+  // If not in memory, try to load from file
+  if (!repository) {
+    try {
+      const data = fs.readFileSync(`./data/repositories/${req.params.id}.json`, 'utf8');
+      repository = JSON.parse(data);
+    } catch (error) {
+      console.error(`Error loading repository ${req.params.id}:`, error);
+    }
+  }
   
   if (!repository) {
     return res.status(404).json({ error: 'Repository not found' });
@@ -112,79 +298,195 @@ app.get('/api/repositories/:id', (req, res) => {
   res.json({ repository });
 });
 
-app.post('/api/repositories/:id/additional-files', (req, res) => {
-  const repository = repositories.find(repo => repo.id === req.params.id);
-  
-  if (!repository) {
-    return res.status(404).json({ error: 'Repository not found' });
+app.post('/api/repositories/:id/additional-files', async (req, res) => {
+  try {
+    // Find repository
+    let repository = null;
+    try {
+      const data = fs.readFileSync(`./data/repositories/${req.params.id}.json`, 'utf8');
+      repository = JSON.parse(data);
+    } catch (error) {
+      console.error(`Error loading repository ${req.params.id}:`, error);
+    }
+    
+    if (!repository) {
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+    
+    // If already has all files, just return
+    if (repository.ingestedContent.allFilesIncluded) {
+      return res.json({ 
+        success: true,
+        repository 
+      });
+    }
+    
+    // Re-fetch with all files included
+    const repoResponse = await github.get(`/repos/${repository.owner}/${repository.name}`);
+    const repo = repoResponse.data;
+    
+    const treeResponse = await github.get(
+      `/repos/${repository.owner}/${repository.name}/git/trees/${repo.default_branch}?recursive=1`
+    );
+    const tree = treeResponse.data;
+    
+    // Format the tree for display
+    let formattedTree = '';
+    const fileEntries = {};
+    let fileCount = 0;
+    let totalSize = 0;
+    
+    // Process all files
+    for (const item of tree.tree) {
+      // Skip directories
+      if (item.type === 'tree') continue;
+      
+      // Skip files that are too large
+      if (item.size > FILE_SIZE_LIMIT) {
+        console.warn(`Skipping large file: ${item.path} (${item.size} bytes)`);
+        continue;
+      }
+      
+      fileEntries[item.path] = item;
+      fileCount++;
+      totalSize += item.size || 0;
+    }
+    
+    // Build formatted tree
+    const pathSegments = Object.keys(fileEntries).sort();
+    
+    let lastPathParts = [];
+    
+    for (const filePath of pathSegments) {
+      const parts = filePath.split('/');
+      
+      // Calculate the common part with the last path
+      let commonPathLength = 0;
+      if (lastPathParts.length > 0) {
+        for (let i = 0; i < Math.min(parts.length - 1, lastPathParts.length - 1); i++) {
+          if (parts[i] === lastPathParts[i]) {
+            commonPathLength = i + 1;
+          } else {
+            break;
+          }
+        }
+      }
+      
+      // Add directories that are different from the last path
+      for (let i = commonPathLength; i < parts.length - 1; i++) {
+        const indent = '│   '.repeat(i);
+        formattedTree += `${indent}├── ${parts[i]}/\n`;
+      }
+      
+      // Add the file
+      const fileIndent = '│   '.repeat(parts.length - 1);
+      formattedTree += `${fileIndent}├── ${parts[parts.length - 1]}\n`;
+      
+      lastPathParts = parts;
+    }
+    
+    // Update repository object
+    repository.fileCount = fileCount;
+    repository.sizeInBytes = totalSize;
+    repository.ingestedContent.allFilesIncluded = true;
+    repository.ingestedContent.tree = formattedTree;
+    
+    // Save to file system
+    fs.writeFileSync(
+      `./data/repositories/${repository.id}.json`, 
+      JSON.stringify(repository, null, 2)
+    );
+    
+    // Update in-memory store if present
+    const repoIndex = repositories.findIndex(repo => repo.id === repository.id);
+    if (repoIndex !== -1) {
+      repositories[repoIndex] = repository;
+    }
+    
+    return res.json({ 
+      success: true,
+      repository 
+    });
+  } catch (error) {
+    console.error('Error loading additional files:', error.message);
+    return res.status(error.response?.status || 500).json({ 
+      error: error.response?.data?.message || 'Failed to load additional files' 
+    });
   }
-  
-  // Update the repository to include all files
-  repository.ingestedContent.allFilesIncluded = true;
-  repository.fileCount += Math.floor(Math.random() * 50) + 10;
-  repository.sizeInBytes += Math.floor(Math.random() * 1000000) + 100000;
-  
-  res.json({ 
-    success: true,
-    repository 
-  });
 });
 
-app.post('/api/extract/:id', (req, res) => {
+app.post('/api/extract/:id', async (req, res) => {
   const { apiKey } = req.body;
-  const repository = repositories.find(repo => repo.id === req.params.id);
-  
-  if (!repository) {
-    return res.status(404).json({ error: 'Repository not found' });
-  }
   
   if (!apiKey) {
     return res.status(400).json({ error: 'Claude API key is required' });
   }
   
-  // Mock a delay for Claude AI processing
-  setTimeout(() => {
-    const extractedCode = `// Core algorithm extracted from ${repository.owner}/${repository.name}
-function processData(input) {
-  // Parse input data
-  const data = JSON.parse(input);
-  
-  // Apply transformation
-  const result = data.map(item => ({
-    id: item.id,
-    name: item.name,
-    score: calculateScore(item)
-  }));
-  
-  return result;
-}
-
-function calculateScore(item) {
-  // Core scoring algorithm
-  let score = item.baseValue * 0.8;
-  
-  if (item.factors) {
-    score += item.factors.reduce((sum, factor) => sum + factor.weight, 0);
-  }
-  
-  return Math.round(score * 100) / 100;
-}
-
-// Main processing function
-export function analyzeRepository(repo) {
-  const metrics = processData(repo.data);
-  return {
-    summary: generateSummary(metrics),
-    details: metrics,
-    timestamp: new Date().toISOString()
-  };
-}`;
+  try {
+    // Find repository
+    let repository = null;
+    try {
+      const data = fs.readFileSync(`./data/repositories/${req.params.id}.json`, 'utf8');
+      repository = JSON.parse(data);
+    } catch (error) {
+      console.error(`Error loading repository ${req.params.id}:`, error);
+    }
     
-    res.json({ 
+    if (!repository) {
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+    
+    // Configure Anthropic API client
+    const anthropic = axios.create({
+      baseURL: 'https://api.anthropic.com',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      }
+    });
+    
+    // Prepare code content for analysis
+    const codeContent = repository.ingestedContent.fullCode || '';
+    const repoDescription = repository.summary.description || '';
+    
+    // Create prompt for Claude
+    const prompt = `
+Human: You are an expert code analyzer. I need you to analyze the following GitHub repository code and extract the core algorithms and key elements. 
+Focus on identifying and extracting the most important parts that someone would need to understand how this code works.
+Provide only the extracted code with brief comments explaining what each part does.
+
+Repository: ${repository.owner}/${repository.name}
+Description: ${repoDescription}
+
+Here's the code:
+
+${codeContent}
+
+Extract and present the core algorithms and key elements from this code.
+`;
+    
+    // Send prompt to Claude API
+    const response = await anthropic.post('/v1/complete', {
+      prompt,
+      model: "claude-2",
+      max_tokens_to_sample: 2048,
+      temperature: 0.7,
+      stop_sequences: ["Human:", "Assistant:"]
+    });
+    
+    const extractedCode = response.data.completion.trim();
+    
+    return res.json({ 
       success: true,
       extractedCode 
     });
-  }, 2000);
+  } catch (error) {
+    console.error('Error extracting code:', error.message);
+    return res.status(error.response?.status || 500).json({ 
+      error: error.response?.data?.message || 'Failed to extract code' 
+    });
+  }
 });
 
 // Serve static files from the React build directory in production
