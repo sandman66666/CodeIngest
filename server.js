@@ -264,6 +264,16 @@ const createGitHubClient = (req) => {
   });
 };
 
+// Helper function to create unauthenticated GitHub API client
+const createUnauthenticatedGitHubClient = () => {
+  return axios.create({
+    baseURL: 'https://api.github.com',
+    headers: {
+      Accept: 'application/vnd.github.v3+json'
+    }
+  });
+};
+
 // In-memory repository store (in production, use a database)
 const repositories = [];
 
@@ -320,15 +330,15 @@ app.post('/api/public-repositories', async (req, res) => {
     }
     
     const owner = match[1];
-    const name = match[2].replace('.git', '');
+    const repo = match[2].replace('.git', '');
     
-    // Create a GitHub client based on the current user's auth status
-    const githubClient = createGitHubClient(req);
+    // Use authenticated client if user is logged in, otherwise use unauthenticated client
+    const githubClient = req.isAuthenticated() ? createGitHubClient(req) : createUnauthenticatedGitHubClient();
     
     // Check if repository exists and is accessible
     let repoData;
     try {
-      const response = await githubClient.get(`/repos/${owner}/${name}`);
+      const response = await githubClient.get(`/repos/${owner}/${repo}`);
       repoData = response.data;
     } catch (error) {
       if (error.response?.status === 404) {
@@ -338,7 +348,7 @@ app.post('/api/public-repositories', async (req, res) => {
       }
     }
     
-    console.log(`Ingesting repository: ${owner}/${name}`);
+    console.log(`Ingesting repository: ${owner}/${repo}`);
     console.log('Repository info:', {
       stars: repoData.stargazers_count,
       language: repoData.language,
@@ -347,7 +357,7 @@ app.post('/api/public-repositories', async (req, res) => {
     });
     
     // Get repository contents
-    const contents = await githubClient.get(`/repos/${owner}/${name}/git/trees/HEAD?recursive=1`);
+    const contents = await githubClient.get(`/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`);
     
     // Filter for important files based on extension
     const filteredFiles = contents.data.tree
@@ -379,7 +389,7 @@ app.post('/api/public-repositories', async (req, res) => {
     
     if (readmeFile) {
       try {
-        const readmeResponse = await githubClient.get(`/repos/${owner}/${name}/contents/${readmeFile.path}`);
+        const readmeResponse = await githubClient.get(`/repos/${owner}/${repo}/contents/${readmeFile.path}`);
         if (readmeResponse.data.content) {
           readmeContent = Buffer.from(readmeResponse.data.content, 'base64').toString('utf-8');
         }
@@ -392,7 +402,7 @@ app.post('/api/public-repositories', async (req, res) => {
     let allCode = '';
     for (const file of filteredFiles) {
       try {
-        const fileResponse = await githubClient.get(`/repos/${owner}/${name}/contents/${file.path}`);
+        const fileResponse = await githubClient.get(`/repos/${owner}/${repo}/contents/${file.path}`);
         
         if (fileResponse.data.content) {
           const content = Buffer.from(fileResponse.data.content, 'base64').toString('utf-8');
@@ -408,7 +418,7 @@ app.post('/api/public-repositories', async (req, res) => {
       id: uuidv4(),
       url,
       owner,
-      name,
+      name: repo,
       createdAt: new Date().toISOString(),
       summary: {
         stars: repoData.stargazers_count,
@@ -429,7 +439,7 @@ app.post('/api/public-repositories', async (req, res) => {
     // Store repository in filesystem
     fs.writeFileSync(`./data/repositories/${repository.id}.json`, JSON.stringify(repository, null, 2));
     
-    console.log(`Repository ${owner}/${name} ingested successfully`);
+    console.log(`Repository ${owner}/${repo} ingested successfully`);
     
     return res.status(201).json({ success: true, repository });
     

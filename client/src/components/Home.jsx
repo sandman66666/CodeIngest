@@ -27,8 +27,13 @@ const Home = () => {
       }
     };
 
+    // Set GitHub tab as active by default when user is authenticated
+    if (isAuthenticated && !activeTab) {
+      setActiveTab('github');
+    }
+    
     fetchRepositories();
-  }, []);
+  }, [isAuthenticated]);
 
   // Fetch user's GitHub repositories when authenticated
   useEffect(() => {
