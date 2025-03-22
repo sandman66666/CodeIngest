@@ -194,11 +194,26 @@ app.get('/auth/user', (req, res) => {
   }
 });
 
-app.get('/auth/logout', (req, res) => {
-  req.logout(function(err) {
-    if (err) { return next(err); }
-    res.redirect('/');
-  });
+app.get('/auth/logout', (req, res, next) => {
+  // Check if logout function exists and is a function
+  if (req.logout) {
+    if (typeof req.logout === 'function') {
+      req.logout((err) => {
+        if (err) { return next(err); }
+        res.redirect('/');
+      });
+    } else {
+      // Older versions of Passport
+      req.logout();
+      res.redirect('/');
+    }
+  } else {
+    // No logout function, just destroy session and redirect
+    req.session.destroy((err) => {
+      if (err) { return next(err); }
+      res.redirect('/');
+    });
+  }
 });
 
 // Helper function to create GitHub API client
@@ -208,7 +223,7 @@ const createGitHubClient = (req) => {
   };
   
   // If user is authenticated, add their token
-  if (req.isAuthenticated()) {
+  if (req && req.isAuthenticated && req.isAuthenticated()) {
     headers.Authorization = `token ${req.user.accessToken}`;
   }
   
@@ -221,8 +236,13 @@ const createGitHubClient = (req) => {
 // In-memory repository store (in production, use a database)
 const repositories = [];
 
-// GitHub API client
-const github = createGitHubClient({});
+// GitHub API client with default config (no auth)
+const github = axios.create({
+  baseURL: 'https://api.github.com',
+  headers: {
+    Accept: 'application/vnd.github.v3+json'
+  }
+});
 
 // Filter functions for important files
 const isImportantFile = (filePath, extension) => {
