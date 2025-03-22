@@ -97,8 +97,10 @@ const Home = () => {
     
     try {
       const repoUrl = `https://github.com/${repo.fullName}`;
-      const response = await axios.post('/api/public-repositories', { 
+      // Use authenticated endpoint for user's repositories
+      const response = await axios.post('/api/private-repositories', { 
         url: repoUrl,
+        repoFullName: repo.fullName,
         includeAllFiles
       });
       

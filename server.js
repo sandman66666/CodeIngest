@@ -441,6 +441,98 @@ app.post('/api/public-repositories', async (req, res) => {
   }
 });
 
+// Add endpoint for private repositories (requires authentication)
+app.post('/api/private-repositories', async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Authentication required to access private repositories' });
+  }
+
+  try {
+    const { url, repoFullName, includeAllFiles } = req.body;
+    
+    if (!url && !repoFullName) {
+      return res.status(400).json({ error: 'Repository URL or full name is required' });
+    }
+    
+    // Extract owner and repo from the full name
+    let owner, repo;
+    
+    if (repoFullName) {
+      [owner, repo] = repoFullName.split('/');
+    } else {
+      // Parse GitHub URL as fallback
+      const githubUrlPattern = /github\.com\/([^\/]+)\/([^\/]+)/;
+      const match = url.match(githubUrlPattern);
+      
+      if (!match) {
+        return res.status(400).json({ error: 'Invalid GitHub repository URL' });
+      }
+      
+      owner = match[1];
+      repo = match[2].replace('.git', '');
+    }
+    
+    // Create a repository ID
+    const repositoryId = `${owner}-${repo}-${Date.now()}`;
+    
+    // Create GitHub client with user's auth token
+    const githubClient = createGitHubClient(req);
+    
+    // Fetch repository metadata
+    const repoResponse = await githubClient.get(`/repos/${owner}/${repo}`);
+    const repoData = repoResponse.data;
+    
+    // Create repository object
+    const repository = {
+      id: repositoryId,
+      name: repoData.name,
+      owner: repoData.owner.login,
+      url: repoData.html_url,
+      description: repoData.description,
+      stars: repoData.stargazers_count,
+      forks: repoData.forks_count,
+      language: repoData.language,
+      isPrivate: repoData.private,
+      size: repoData.size,
+      createdAt: new Date().toISOString(),
+      files: [],
+      fileCount: 0,
+      totalSize: 0,
+      includesAllFiles: includeAllFiles
+    };
+    
+    // Fetch repository contents
+    await fetchRepositoryContents(githubClient, repository, owner, repo, '', includeAllFiles);
+    
+    // Normalize files size and calculate total size
+    repository.totalSize = repository.files.reduce((total, file) => total + file.size, 0);
+    repository.fileCount = repository.files.length;
+    
+    // Save to memory and disk
+    repositories.unshift(repository);
+    
+    // Make sure data directory exists
+    if (!fs.existsSync('./data')) {
+      fs.mkdirSync('./data');
+    }
+    
+    if (!fs.existsSync('./data/repositories')) {
+      fs.mkdirSync('./data/repositories');
+    }
+    
+    // Save repository data to file
+    fs.writeFileSync(
+      `./data/repositories/${repository.id}.json`,
+      JSON.stringify(repository, null, 2)
+    );
+    
+    res.json({ repository });
+  } catch (error) {
+    console.error('Error ingesting repository:', error.message);
+    res.status(500).json({ error: 'Failed to ingest repository' });
+  }
+});
+
 // Get all repositories
 app.get('/api/repositories', (req, res) => {
   // In a real app, this would fetch from a database
