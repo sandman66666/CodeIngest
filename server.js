@@ -75,6 +75,7 @@ passport.use(new GitHubStrategy({
 function(accessToken, refreshToken, profile, done) {
   console.log('GitHub OAuth successful - received access token');
   console.log(`User authorized: ${profile.username} (${profile.id})`);
+  console.log(`Auth token scope: ${profile._json.scope || 'not provided'}`);
   
   // Store comprehensive user data
   const user = {
@@ -84,6 +85,7 @@ function(accessToken, refreshToken, profile, done) {
     accessToken: accessToken,
     emails: profile.emails,
     avatar: profile._json.avatar_url,
+    scope: profile._json.scope,
     lastLogin: new Date()
   };
   
@@ -215,26 +217,21 @@ const isImportantFile = (filePath, extension) => {
 };
 
 // Authentication Routes
-app.get('/auth/github', (req, res, next) => {
-  // Store the intended return URL in session if available
-  if (req.query.returnTo) {
-    req.session.returnTo = req.query.returnTo;
-  }
-  
-  console.log('GitHub auth initiated');
-  passport.authenticate('github')(req, res, next);
-});
+app.get('/auth/github', 
+  passport.authenticate('github', { scope: ['user:email', 'repo'] })
+);
 
 app.get('/auth/github/callback', 
   passport.authenticate('github', { 
-    failureRedirect: '/?error=auth_failed'
+    failureRedirect: '/',
+    scope: ['user:email', 'repo']
   }),
   (req, res) => {
-    // Successful authentication, redirect to the intended URL or home
-    console.log('User authenticated successfully:', req.user ? req.user.username : 'unknown user');
-    const returnTo = req.session.returnTo || '/';
-    delete req.session.returnTo;
-    res.redirect(returnTo);
+    console.log("GitHub auth successful - redirecting to client");
+    // Redirect to client application
+    res.redirect(process.env.NODE_ENV === 'production' 
+      ? 'https://codanalyzer-49ec21ea6aca.herokuapp.com/' 
+      : 'http://localhost:3001/');
   }
 );
 
@@ -305,14 +302,22 @@ const createGitHubClient = (req) => {
   if (req && req.isAuthenticated && req.isAuthenticated()) {
     // Use the 'token xxx' format which is preferred by GitHub API
     headers.Authorization = `token ${req.user.accessToken}`;
-    console.log('Creating authenticated GitHub client with token');
+    console.log('Creating authenticated GitHub client with OAuth token');
+    
+    // Log token information for debugging (just the first few characters)
+    if (req.user.accessToken) {
+      const tokenPreview = req.user.accessToken.substring(0, 4) + '...';
+      console.log(`Token preview: ${tokenPreview}`);
+    }
   } else {
     console.log('Creating unauthenticated GitHub client');
   }
   
+  // Create a client with extended timeout for potentially slow operations
   return axios.create({
     baseURL: 'https://api.github.com',
-    headers
+    headers,
+    timeout: 10000 // 10 second timeout
   });
 };
 
@@ -399,106 +404,127 @@ app.post('/api/public-repositories', async (req, res) => {
     });
     
     // Get repository contents
-    const contents = await githubClient.get(`/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`);
-    
-    // Filter for important files based on extension
-    const filteredFiles = contents.data.tree
-      .filter(item => {
-        if (item.type !== 'blob') return false;
-        
-        // If includeAllFiles is true, include most files except binary/large files
-        if (includeAllFiles) {
-          return !isJsonIgnorableFile(item.path);
-        } 
-        
-        // Otherwise only include important files based on extension
-        const fileExtension = path.extname(item.path);
-        return importantExtensions.includes(fileExtension);
-      })
-      .filter(item => item.size <= FILE_SIZE_LIMIT);
-    
-    console.log(`Found ${filteredFiles.length} important files to ingest`);
-    
-    // Create a tree representation for display
-    const fileTree = buildFileTree(contents.data.tree);
-    
-    // Get README content if available
-    let readmeContent = '';
-    const readmeFile = contents.data.tree.find(item => 
-      item.path.toLowerCase() === 'readme.md' || 
-      item.path.toLowerCase() === 'readme' ||
-      item.path.toLowerCase() === 'readme.txt'
-    );
-    
-    if (readmeFile) {
-      try {
-        const readmeResponse = await githubClient.get(`/repos/${owner}/${repo}/contents/${readmeFile.path}`);
-        if (readmeResponse.data.content) {
-          readmeContent = Buffer.from(readmeResponse.data.content, 'base64').toString('utf-8');
-        }
-      } catch (error) {
-        console.error('Error fetching README:', error.message);
-      }
-    }
-    
-    // Get contents of each file
-    let allCode = '';
-    for (const file of filteredFiles) {
-      try {
-        const fileResponse = await githubClient.get(`/repos/${owner}/${repo}/contents/${file.path}`);
-        
-        if (fileResponse.data.content) {
-          const content = Buffer.from(fileResponse.data.content, 'base64').toString('utf-8');
-          // Add to files array for the new structure
-          repository.files.push({
-            name: path.basename(file.path),
-            path: file.path,
-            content: content,
-            size: file.size || 0,
-            extension: path.extname(file.path)
-          });
+    try {
+      // First try to get the default branch
+      console.log(`Fetching repo details to determine default branch for ${owner}/${repo}`);
+      const repoDetailsResponse = await githubClient.get(`/repos/${owner}/${repo}`);
+      const defaultBranch = repoDetailsResponse.data.default_branch || 'main';
+      console.log(`Using default branch: ${defaultBranch} for ${owner}/${repo}`);
+      
+      // Get the latest commit SHA for the default branch
+      console.log(`Fetching latest commit for branch ${defaultBranch}`);
+      const refsResponse = await githubClient.get(`/repos/${owner}/${repo}/git/refs/heads/${defaultBranch}`);
+      const latestCommitSha = refsResponse.data.object.sha;
+      console.log(`Latest commit SHA: ${latestCommitSha}`);
+      
+      // Get the tree using the commit SHA
+      console.log(`Fetching tree using commit SHA`);
+      const contents = await githubClient.get(
+        `/repos/${owner}/${repo}/git/trees/${latestCommitSha}?recursive=1`
+      );
+      
+      // Filter for important files based on extension
+      const filteredFiles = contents.data.tree
+        .filter(item => {
+          if (item.type !== 'blob') return false;
           
-          // Also keep building the allCode string for compatibility
-          allCode += `\n\n// File: ${file.path}\n${content}`;
+          // If includeAllFiles is true, include most files except binary/large files
+          if (includeAllFiles) {
+            return !isJsonIgnorableFile(item.path);
+          } 
+          
+          // Otherwise only include important files based on extension
+          const fileExtension = path.extname(item.path);
+          return importantExtensions.includes(fileExtension);
+        })
+        .filter(item => item.size <= FILE_SIZE_LIMIT);
+      
+      console.log(`Found ${filteredFiles.length} important files to ingest`);
+      
+      // Create a tree representation for display
+      const fileTree = buildFileTree(contents.data.tree);
+      
+      // Get README content if available
+      let readmeContent = '';
+      const readmeFile = contents.data.tree.find(item => 
+        item.path.toLowerCase() === 'readme.md' || 
+        item.path.toLowerCase() === 'readme' ||
+        item.path.toLowerCase() === 'readme.txt'
+      );
+      
+      if (readmeFile) {
+        try {
+          const readmeResponse = await githubClient.get(`/repos/${owner}/${repo}/contents/${readmeFile.path}`);
+          if (readmeResponse.data.content) {
+            readmeContent = Buffer.from(readmeResponse.data.content, 'base64').toString('utf-8');
+          }
+        } catch (error) {
+          console.error('Error fetching README:', error.message);
         }
-      } catch (error) {
-        console.error(`Error fetching ${file.path}:`, error.message);
       }
+      
+      // Get contents of each file
+      let allCode = '';
+      for (const file of filteredFiles) {
+        try {
+          const fileResponse = await githubClient.get(`/repos/${owner}/${repo}/contents/${file.path}`);
+          
+          if (fileResponse.data.content) {
+            const content = Buffer.from(fileResponse.data.content, 'base64').toString('utf-8');
+            // Add to files array for the new structure
+            repository.files.push({
+              name: path.basename(file.path),
+              path: file.path,
+              content: content,
+              size: file.size || 0,
+              extension: path.extname(file.path)
+            });
+            
+            // Also keep building the allCode string for compatibility
+            allCode += `\n\n// File: ${file.path}\n${content}`;
+          }
+        } catch (error) {
+          console.error(`Error fetching ${file.path}:`, error.message);
+        }
+      }
+      
+      // Create repository object
+      const repository = {
+        id: uuidv4(),
+        url,
+        owner,
+        name: repo,
+        createdAt: new Date().toISOString(),
+        summary: {
+          stars: repoData.stargazers_count,
+          language: repoData.language,
+          description: repoData.description,
+          isPrivate: repoData.private
+        },
+        fileCount: filteredFiles.length,
+        sizeInBytes: filteredFiles.reduce((sum, file) => sum + file.size, 0),
+        fileTree: fileTree,
+        readme: readmeContent,
+        includesAllFiles: includeAllFiles,
+        files: []
+      };
+      
+      // Store repository in filesystem
+      fs.writeFileSync(`./data/repositories/${repository.id}.json`, JSON.stringify(repository, null, 2));
+      
+      console.log(`Repository ${owner}/${repo} ingested successfully`);
+      
+      return res.status(201).json({ success: true, repository });
+      
+    } catch (error) {
+      console.error('Error ingesting repository:', error.message);
+      return res.status(error.response?.status || 500).json({ 
+        error: error.response?.data?.message || 'Failed to ingest repository' 
+      });
     }
-    
-    // Create repository object
-    const repository = {
-      id: uuidv4(),
-      url,
-      owner,
-      name: repo,
-      createdAt: new Date().toISOString(),
-      summary: {
-        stars: repoData.stargazers_count,
-        language: repoData.language,
-        description: repoData.description,
-        isPrivate: repoData.private
-      },
-      fileCount: filteredFiles.length,
-      sizeInBytes: filteredFiles.reduce((sum, file) => sum + file.size, 0),
-      fileTree: fileTree,
-      readme: readmeContent,
-      includesAllFiles: includeAllFiles,
-      files: []
-    };
-    
-    // Store repository in filesystem
-    fs.writeFileSync(`./data/repositories/${repository.id}.json`, JSON.stringify(repository, null, 2));
-    
-    console.log(`Repository ${owner}/${repo} ingested successfully`);
-    
-    return res.status(201).json({ success: true, repository });
-    
   } catch (error) {
     console.error('Error ingesting repository:', error.message);
-    return res.status(error.response?.status || 500).json({ 
-      error: error.response?.data?.message || 'Failed to ingest repository' 
-    });
+    return res.status(500).json({ error: 'Failed to ingest repository' });
   }
 });
 
@@ -577,7 +603,23 @@ app.post('/api/private-repositories', async (req, res) => {
       
       // Get repository contents
       try {
-        const contents = await githubClient.get(`/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`);
+        // First try to get the default branch
+        console.log(`Fetching repo details to determine default branch for ${owner}/${repo}`);
+        const repoDetailsResponse = await githubClient.get(`/repos/${owner}/${repo}`);
+        const defaultBranch = repoDetailsResponse.data.default_branch || 'main';
+        console.log(`Using default branch: ${defaultBranch} for ${owner}/${repo}`);
+        
+        // Get the latest commit SHA for the default branch
+        console.log(`Fetching latest commit for branch ${defaultBranch}`);
+        const refsResponse = await githubClient.get(`/repos/${owner}/${repo}/git/refs/heads/${defaultBranch}`);
+        const latestCommitSha = refsResponse.data.object.sha;
+        console.log(`Latest commit SHA: ${latestCommitSha}`);
+        
+        // Get the tree using the commit SHA
+        console.log(`Fetching tree using commit SHA`);
+        const contents = await githubClient.get(
+          `/repos/${owner}/${repo}/git/trees/${latestCommitSha}?recursive=1`
+        );
         
         // Filter for important files based on extension
         const filteredFiles = contents.data.tree

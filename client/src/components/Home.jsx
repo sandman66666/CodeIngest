@@ -414,17 +414,25 @@ const Home = () => {
             </div>
             
             <div className="input-group">
-              <label htmlFor="privateToken">Personal Access Token</label>
+              <label htmlFor="privateToken">
+                {isAuthenticated 
+                  ? 'Personal Access Token (Optional)' 
+                  : 'Personal Access Token (Required for private repos)'}
+              </label>
               <input
                 type="password"
                 id="privateToken"
                 value={privateToken}
                 onChange={(e) => setPrivateToken(e.target.value)}
-                placeholder="Enter your GitHub personal access token"
+                placeholder={isAuthenticated 
+                  ? "Optional: Only needed if OAuth permissions aren't working" 
+                  : "Enter your GitHub personal access token"}
                 disabled={loadingPrivate}
               />
               <small className="helper-text">
-                Personal access token with 'repo' scope is required for private repositories. 
+                {isAuthenticated 
+                  ? "You're already authenticated with GitHub OAuth. This field is only needed if you experience permission issues." 
+                  : "Personal access token with 'repo' scope is required for private repositories."} 
                 <a 
                   href="https://github.com/settings/tokens/new" 
                   target="_blank" 
