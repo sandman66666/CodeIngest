@@ -73,6 +73,9 @@ passport.use(new GitHubStrategy({
   scope: ['user:email', 'repo'] // Request access to user's repositories
 },
 function(accessToken, refreshToken, profile, done) {
+  console.log('GitHub OAuth successful - received access token');
+  console.log(`User authorized: ${profile.username} (${profile.id})`);
+  
   // Store comprehensive user data
   const user = {
     id: profile.id,
@@ -300,7 +303,11 @@ const createGitHubClient = (req) => {
   
   // If user is authenticated, add their token
   if (req && req.isAuthenticated && req.isAuthenticated()) {
+    // Use the 'token xxx' format which is preferred by GitHub API
     headers.Authorization = `token ${req.user.accessToken}`;
+    console.log('Creating authenticated GitHub client with token');
+  } else {
+    console.log('Creating unauthenticated GitHub client');
   }
   
   return axios.create({
@@ -315,6 +322,17 @@ const createUnauthenticatedGitHubClient = () => {
     baseURL: 'https://api.github.com',
     headers: {
       Accept: 'application/vnd.github.v3+json'
+    }
+  });
+};
+
+// Helper function to create GitHub API client with a personal access token
+const createGitHubClientWithToken = (token) => {
+  return axios.create({
+    baseURL: 'https://api.github.com',
+    headers: {
+      Accept: 'application/vnd.github.v3+json',
+      Authorization: `token ${token}`
     }
   });
 };
@@ -484,14 +502,19 @@ app.post('/api/public-repositories', async (req, res) => {
   }
 });
 
-// Add endpoint for private repositories (requires authentication)
+// Add endpoint for private repositories (requires authentication or token)
 app.post('/api/private-repositories', async (req, res) => {
-  if (!req.isAuthenticated()) {
+  // Check if the user is authenticated or provided a personal access token
+  const hasToken = req.body.personalAccessToken && req.body.personalAccessToken.trim().length > 0;
+  
+  if (!req.isAuthenticated() && !hasToken) {
     return res.status(401).json({ error: 'Authentication required to access private repositories' });
   }
 
+  console.log(`Private repo ingestion request from ${req.isAuthenticated() ? `user: ${req.user.username}` : 'a personal access token'}`);
+  
   try {
-    const { url, repoFullName, includeAllFiles } = req.body;
+    const { url, repoFullName, includeAllFiles, personalAccessToken } = req.body;
     
     if (!url && !repoFullName) {
       return res.status(400).json({ error: 'Repository URL or full name is required' });
@@ -515,129 +538,144 @@ app.post('/api/private-repositories', async (req, res) => {
       repo = match[2].replace('.git', '');
     }
     
+    console.log(`Attempting to ingest private repository: ${owner}/${repo}`);
+    
     // Create a repository ID
     const repositoryId = `${owner}-${repo}-${Date.now()}`;
     
-    // Create GitHub client with user's auth token
-    const githubClient = createGitHubClient(req);
+    // Create GitHub client with user's auth token or the provided personal access token
+    const githubClient = hasToken 
+      ? createGitHubClientWithToken(personalAccessToken)
+      : createGitHubClient(req);
     
     // Fetch repository metadata
-    const repoResponse = await githubClient.get(`/repos/${owner}/${repo}`);
-    const repoData = repoResponse.data;
-    
-    // Create repository object
-    const repository = {
-      id: repositoryId,
-      name: repoData.name,
-      owner: repoData.owner.login,
-      url: repoData.html_url,
-      description: repoData.description,
-      stars: repoData.stargazers_count,
-      forks: repoData.forks_count,
-      language: repoData.language,
-      isPrivate: repoData.private,
-      size: repoData.size,
-      createdAt: new Date().toISOString(),
-      files: [], // Initialize files array
-      fileCount: 0,
-      totalSize: 0,
-      includesAllFiles: includeAllFiles
-    };
-    
-    console.log(`Starting to fetch contents for ${owner}/${repo}`);
-    
-    // Get repository contents
-    const contents = await githubClient.get(`/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`);
-    
-    // Filter for important files based on extension
-    const filteredFiles = contents.data.tree
-      .filter(item => {
-        if (item.type !== 'blob') return false;
-        
-        // If includeAllFiles is true, include most files except binary/large files
-        if (includeAllFiles) {
-          return !isJsonIgnorableFile(item.path);
-        } 
-        
-        // Otherwise only include important files based on extension
-        const extension = path.extname(item.path);
-        return importantExtensions.includes(extension);
-      })
-      .filter(item => item.size <= FILE_SIZE_LIMIT);
-    
-    console.log(`Found ${filteredFiles.length} important files to ingest`);
-    
-    // Fetch content for each file
-    for (const item of filteredFiles) {
-      try {
-        const fileResponse = await githubClient.get(`/repos/${owner}/${repo}/contents/${item.path}`);
-        let content = fileResponse.data.content;
-        
-        // GitHub API returns base64 encoded content
-        if (content) {
-          content = Buffer.from(content, 'base64').toString('utf-8');
-        }
-        
-        // Ensure files array exists before checking it
-        if (!repository.files) {
-          repository.files = [];
-        }
-        
-        // Add to repository files if not already present
-        if (!repository.files.some(f => f.path === item.path)) {
-          repository.files.push({
-            name: path.basename(item.path),
-            path: item.path,
-            content: content,
-            size: item.size || 0,
-            extension: path.extname(item.path)
-          });
-        }
-      } catch (error) {
-        console.error(`Error fetching file ${item.path}:`, error.message);
-      }
-    }
-    
-    // Create a tree representation for display
-    const fileTree = buildFileTree(contents.data.tree);
-    repository.fileTree = fileTree;
-    
-    // Get README content if available
+    console.log(`Fetching repository metadata for ${owner}/${repo}`);
     try {
-      const readmeResponse = await githubClient.get(`/repos/${owner}/${repo}/readme`);
-      const readmeContent = Buffer.from(readmeResponse.data.content, 'base64').toString('utf-8');
-      repository.readme = readmeContent;
+      const repoResponse = await githubClient.get(`/repos/${owner}/${repo}`);
+      const repoData = repoResponse.data;
+      
+      // Create repository object
+      const repository = {
+        id: repositoryId,
+        name: repoData.name,
+        owner: repoData.owner.login,
+        url: repoData.html_url,
+        description: repoData.description,
+        stars: repoData.stargazers_count,
+        forks: repoData.forks_count,
+        language: repoData.language,
+        isPrivate: repoData.private,
+        size: repoData.size,
+        createdAt: new Date().toISOString(),
+        files: [], // Initialize files array
+        fileCount: 0,
+        totalSize: 0,
+        includesAllFiles: includeAllFiles
+      };
+      
+      console.log(`Starting to fetch contents for ${owner}/${repo}`);
+      
+      // Get repository contents
+      try {
+        const contents = await githubClient.get(`/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`);
+        
+        // Filter for important files based on extension
+        const filteredFiles = contents.data.tree
+          .filter(item => {
+            if (item.type !== 'blob') return false;
+            
+            // If includeAllFiles is true, include most files except binary/large files
+            if (includeAllFiles) {
+              return !isJsonIgnorableFile(item.path);
+            } 
+            
+            // Otherwise only include important files based on extension
+            const extension = path.extname(item.path);
+            return importantExtensions.includes(extension);
+          })
+          .filter(item => item.size <= FILE_SIZE_LIMIT);
+        
+        console.log(`Found ${filteredFiles.length} important files to ingest`);
+        
+        // Fetch content for each file
+        for (const item of filteredFiles) {
+          try {
+            const fileResponse = await githubClient.get(`/repos/${owner}/${repo}/contents/${item.path}`);
+            let content = fileResponse.data.content;
+            
+            // GitHub API returns base64 encoded content
+            if (content) {
+              content = Buffer.from(content, 'base64').toString('utf-8');
+            }
+            
+            // Ensure files array exists before checking it
+            if (!repository.files) {
+              repository.files = [];
+            }
+            
+            // Add to repository files if not already present
+            if (!repository.files.some(f => f.path === item.path)) {
+              repository.files.push({
+                name: path.basename(item.path),
+                path: item.path,
+                content: content,
+                size: item.size || 0,
+                extension: path.extname(item.path)
+              });
+            }
+          } catch (error) {
+            console.error(`Error fetching file ${item.path}:`, error.message);
+          }
+        }
+        
+        // Create a tree representation for display
+        const fileTree = buildFileTree(contents.data.tree);
+        repository.fileTree = fileTree;
+        
+        // Get README content if available
+        try {
+          const readmeResponse = await githubClient.get(`/repos/${owner}/${repo}/readme`);
+          const readmeContent = Buffer.from(readmeResponse.data.content, 'base64').toString('utf-8');
+          repository.readme = readmeContent;
+        } catch (error) {
+          console.log('No README found or error fetching README');
+          repository.readme = '';
+        }
+        
+        // Normalize files size and calculate total size
+        repository.totalSize = repository.files.reduce((total, file) => total + file.size, 0);
+        repository.fileCount = repository.files.length;
+        
+        // Save to memory and disk
+        repositories.unshift(repository);
+        
+        // Make sure data directory exists
+        if (!fs.existsSync('./data')) {
+          fs.mkdirSync('./data');
+        }
+        
+        if (!fs.existsSync('./data/repositories')) {
+          fs.mkdirSync('./data/repositories');
+        }
+        
+        // Save repository data to file
+        fs.writeFileSync(
+          `./data/repositories/${repository.id}.json`,
+          JSON.stringify(repository, null, 2)
+        );
+        
+        res.json({ repository });
+      } catch (error) {
+        console.error(`Error fetching repository contents for ${owner}/${repo}:`, error.message);
+        return res.status(500).json({ error: 'Failed to fetch repository contents' });
+      }
     } catch (error) {
-      console.log('No README found or error fetching README');
-      repository.readme = '';
+      console.error(`Error fetching repository metadata for ${owner}/${repo}:`, error.message);
+      return res.status(500).json({ error: 'Failed to fetch repository metadata' });
     }
-    
-    // Normalize files size and calculate total size
-    repository.totalSize = repository.files.reduce((total, file) => total + file.size, 0);
-    repository.fileCount = repository.files.length;
-    
-    // Save to memory and disk
-    repositories.unshift(repository);
-    
-    // Make sure data directory exists
-    if (!fs.existsSync('./data')) {
-      fs.mkdirSync('./data');
-    }
-    
-    if (!fs.existsSync('./data/repositories')) {
-      fs.mkdirSync('./data/repositories');
-    }
-    
-    // Save repository data to file
-    fs.writeFileSync(
-      `./data/repositories/${repository.id}.json`,
-      JSON.stringify(repository, null, 2)
-    );
-    
-    res.json({ repository });
   } catch (error) {
-    console.error('Error ingesting repository:', error.message);
-    res.status(500).json({ error: 'Failed to ingest repository' });
+    console.error('Error ingesting private repository:', error.message);
+    return res.status(500).json({ error: 'Failed to ingest private repository' });
   }
 });
 
