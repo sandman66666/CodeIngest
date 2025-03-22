@@ -50,12 +50,10 @@ app.use(passport.session());
 passport.use(new GitHubStrategy({
     clientID: process.env.GITHUB_CLIENT_ID,
     clientSecret: process.env.GITHUB_CLIENT_SECRET,
-    // Ensure callback URL is exactly as registered in GitHub OAuth app settings
-    // with no trailing slashes
-    callbackURL: process.env.GITHUB_CALLBACK_URL || 
-      (process.env.NODE_ENV === 'production' 
-        ? 'https://codanalyzer-49ec21ea6aca.herokuapp.com/auth/github/callback'
-        : 'http://localhost:3000/auth/github/callback'),
+    // Use a hard-coded callback URL in production to ensure exact match with GitHub settings
+    callbackURL: process.env.NODE_ENV === 'production'
+      ? 'https://codanalyzer-49ec21ea6aca.herokuapp.com/auth/github/callback'
+      : 'http://localhost:3000/auth/github/callback',
     scope: ['user:email', 'repo'] // Request access to user's repositories
   },
   function(accessToken, refreshToken, profile, done) {
@@ -1130,10 +1128,9 @@ app.get('/auth/debug', (req, res) => {
   if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEBUG === 'true') {
     res.json({
       environment: process.env.NODE_ENV || 'development',
-      callbackURL: process.env.GITHUB_CALLBACK_URL || 
-        (process.env.NODE_ENV === 'production' 
-          ? 'https://codanalyzer-49ec21ea6aca.herokuapp.com/auth/github/callback'
-          : 'http://localhost:3000/auth/github/callback'),
+      callbackURL: process.env.NODE_ENV === 'production'
+        ? 'https://codanalyzer-49ec21ea6aca.herokuapp.com/auth/github/callback'
+        : 'http://localhost:3000/auth/github/callback',
       clientIDConfigured: !!process.env.GITHUB_CLIENT_ID,
       clientSecretConfigured: !!process.env.GITHUB_CLIENT_SECRET
     });
