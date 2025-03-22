@@ -117,14 +117,16 @@ const Home = () => {
     setLoading(true);
     
     try {
-      const repoUrl = `https://github.com/${repo.fullName}`;
+      // Get the URL from the repo object - ensure we have a URL to use
+      const repoUrl = repo.url || repo.html_url || `https://github.com/${repo.fullName || repo.full_name}`;
+      
       // Use authenticated endpoint for user's repositories
       const endpoint = '/api/private-repositories';
       console.log(`Using endpoint: ${endpoint} for GitHub repository: ${repoUrl} (isAuthenticated: ${isAuthenticated})`);
       
       const response = await axios.post(endpoint, { 
         url: repoUrl,
-        repoFullName: repo.fullName,
+        repoFullName: repo.fullName || repo.full_name,
         includeAllFiles
       });
       
@@ -178,14 +180,16 @@ const Home = () => {
     setLoading(true);
     
     try {
-      const repoUrl = `https://github.com/${repo.fullName}`;
+      // Get the URL from the repo object - ensure we have a URL to use
+      const repoUrl = repo.url || repo.html_url || `https://github.com/${repo.fullName || repo.full_name}`;
+      
       // Use authenticated endpoint for user's repositories
       const endpoint = '/api/private-repositories';
       console.log(`Using endpoint: ${endpoint} for GitHub repository: ${repoUrl} (isAuthenticated: ${isAuthenticated})`);
       
       const response = await axios.post(endpoint, { 
         url: repoUrl,
-        repoFullName: repo.fullName,
+        repoFullName: repo.fullName || repo.full_name,
         includeAllFiles
       });
       

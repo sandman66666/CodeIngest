@@ -633,7 +633,7 @@ app.get('/api/repositories', (req, res) => {
         
         // If the repository is private, only return it if the user is authenticated
         // and it belongs to the authenticated user
-        if (repo.summary?.isPrivate) {
+        if (repo.isPrivate) {
           if (!req.isAuthenticated()) {
             return null;
           }
@@ -644,9 +644,11 @@ app.get('/api/repositories', (req, res) => {
           owner: repo.owner,
           name: repo.name,
           createdAt: repo.createdAt,
-          summary: repo.summary,
+          description: repo.description,
+          language: repo.language,
+          isPrivate: repo.isPrivate,
           fileCount: repo.fileCount,
-          sizeInBytes: repo.sizeInBytes
+          totalSize: repo.totalSize
         };
       })
       .filter(Boolean) // Remove null entries (private repos for unauthenticated users)
@@ -726,11 +728,19 @@ app.post('/api/repositories/:id/additional-files', async (req, res) => {
     }
     
     // If already has all files, just return
-    if (repository.ingestedContent.allFilesIncluded) {
+    if (repository.includesAllFiles) {
       return res.json({ 
         success: true,
         repository 
       });
+    }
+    
+    // Determine which GitHub client to use
+    let github;
+    if (repository.isPrivate && req.isAuthenticated()) {
+      github = createGitHubClient(req);
+    } else {
+      github = createPublicGitHubClient();
     }
     
     // Re-fetch with all files included
@@ -750,64 +760,49 @@ app.post('/api/repositories/:id/additional-files', async (req, res) => {
     
     // Process all files
     for (const item of tree.tree) {
-      // Skip directories
-      if (item.type === 'tree') continue;
-      
-      // Skip files that are too large
-      if (item.size > FILE_SIZE_LIMIT) {
-        console.warn(`Skipping large file: ${item.path} (${item.size} bytes)`);
-        continue;
-      }
-      
-      fileEntries[item.path] = item;
-      fileCount++;
-      totalSize += item.size || 0;
-    }
-    
-    // Build formatted tree
-    const pathSegments = Object.keys(fileEntries).sort();
-    
-    let lastPathParts = [];
-    
-    for (const filePath of pathSegments) {
-      const parts = filePath.split('/');
-      
-      // Calculate the common part with the last path
-      let commonPathLength = 0;
-      if (lastPathParts.length > 0) {
-        for (let i = 0; i < Math.min(parts.length - 1, lastPathParts.length - 1); i++) {
-          if (parts[i] === lastPathParts[i]) {
-            commonPathLength = i + 1;
-          } else {
-            break;
+      if (item.type === 'blob') {
+        fileCount++;
+        totalSize += item.size || 0;
+        
+        // Skip large files or binary files
+        if (item.size > FILE_SIZE_LIMIT || isJsonIgnorableFile(item.path)) {
+          continue;
+        }
+        
+        try {
+          const fileResponse = await github.get(`/repos/${repository.owner}/${repository.name}/contents/${item.path}`);
+          const content = fileResponse.data.content 
+            ? Buffer.from(fileResponse.data.content, 'base64').toString('utf-8')
+            : '';
+          
+          // Add to repository files if not already present
+          if (!repository.files.some(f => f.path === item.path)) {
+            repository.files.push({
+              name: path.basename(item.path),
+              path: item.path,
+              content: content,
+              size: item.size || 0,
+              extension: path.extname(item.path)
+            });
           }
+        } catch (error) {
+          console.error(`Error fetching file ${item.path}:`, error.message);
         }
       }
-      
-      // Add directories that are different from the last path
-      for (let i = commonPathLength; i < parts.length - 1; i++) {
-        const indent = '│   '.repeat(i);
-        formattedTree += `${indent}├── ${parts[i]}/\n`;
-      }
-      
-      // Add the file
-      const fileIndent = '│   '.repeat(parts.length - 1);
-      formattedTree += `${fileIndent}├── ${parts[parts.length - 1]}\n`;
-      
-      lastPathParts = parts;
     }
     
     // Update repository object
     repository.fileCount = fileCount;
-    repository.sizeInBytes = totalSize;
-    repository.ingestedContent.allFilesIncluded = true;
-    repository.ingestedContent.tree = formattedTree;
+    repository.totalSize = totalSize;
+    repository.includesAllFiles = true;
+    
+    // Build a tree representation of the file structure if it doesn't exist
+    if (!repository.fileTree) {
+      repository.fileTree = formattedTree;
+    }
     
     // Save to file system
-    fs.writeFileSync(
-      `./data/repositories/${repository.id}.json`, 
-      JSON.stringify(repository, null, 2)
-    );
+    fs.writeFileSync(`./data/repositories/${repository.id}.json`, JSON.stringify(repository, null, 2));
     
     console.log(`Repository ${repository.id} updated with additional files`);
     
@@ -817,13 +812,12 @@ app.post('/api/repositories/:id/additional-files', async (req, res) => {
     });
   } catch (error) {
     console.error('Error loading additional files:', error.message);
-    return res.status(error.response?.status || 500).json({ 
-      error: error.response?.data?.message || 'Failed to load additional files' 
-    });
+    return res.status(500).json({ error: 'Failed to load additional files' });
   }
 });
 
 app.post('/api/extract/:id', async (req, res) => {
+  // Update message to reference updated repository structure
   // Use environment variable for API key
   const apiKey = process.env.ANTHROPIC_API_KEY;
   
@@ -867,8 +861,13 @@ app.post('/api/extract/:id', async (req, res) => {
     });
     
     // Prepare code content for analysis
-    const codeContent = repository.ingestedContent.fullCode || '';
-    const repoDescription = repository.summary.description || '';
+    // Construct fullCode from the files array
+    const fileContents = repository.files.map(file => {
+      return `// File: ${file.path}\n${file.content || '(Binary file or content unavailable)'}\n\n`;
+    }).join('\n');
+    
+    const codeContent = fileContents || '';
+    const repoDescription = repository.description || '';
     
     // Create prompt for Claude - focus on extractable code patterns
     const systemPrompt = "You are an expert code assistant who specializes in extracting reusable code patterns. Your task is to identify the most important and reusable code from repositories and present them in a format that can be directly copied and reused by AI systems or developers.";
@@ -1345,8 +1344,15 @@ async function generateNativeAppCode(repositoryId, repository) {
     // Get repository information
     const repoOwner = repository.owner;
     const repoName = repository.name;
-    const repoDescription = repository.summary?.description || '';
-    const codeContent = repository.ingestedContent?.fullCode || '';
+    const repoDescription = repository.description || '';
+    
+    // Build code content from files array if ingestedContent.fullCode doesn't exist
+    let codeContent = '';
+    if (repository.files && repository.files.length > 0) {
+      codeContent = repository.files.map(file => {
+        return `// File: ${file.path}\n${file.content || '(Binary file or content unavailable)'}\n\n`;
+      }).join('\n');
+    }
     
     // Create system prompt
     const systemPrompt = `You are an expert iOS developer who specializes in converting web applications to native iOS apps using Swift and SwiftUI. 
@@ -1459,12 +1465,16 @@ app.get('/api/search/repositories', async (req, res) => {
       id: repo.id,
       name: repo.name,
       full_name: repo.full_name,
+      fullName: repo.full_name, // Add this for compatibility with existing code
       description: repo.description,
       private: repo.private,
+      isPrivate: repo.private, // Add this for compatibility with existing code
       language: repo.language,
       stars: repo.stargazers_count,
       url: repo.html_url,
-      updated_at: repo.updated_at
+      html_url: repo.html_url, // Add this for compatibility with existing code
+      updated_at: repo.updated_at,
+      updatedAt: repo.updated_at // Add this for compatibility with existing code
     }));
     
     res.json(repositories);
