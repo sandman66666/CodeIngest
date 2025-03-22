@@ -7,6 +7,8 @@ const repositoryRoutes = require('./routes/repository-routes');
 
 // Initialize Express app
 const app = express();
+
+// Get port from environment or use default
 const PORT = process.env.PORT || 3000;
 
 // Middleware
@@ -35,10 +37,11 @@ if (process.env.NODE_ENV === 'production') {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`GitHub OAuth: ${process.env.GITHUB_CLIENT_ID ? 'Configured' : 'Not configured'}`);
-  console.log(`Claude API: ${process.env.ANTHROPIC_API_KEY ? 'Configured' : 'Not configured'}`);
+  console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  
+  // Log environment status
+  console.log('GitHub OAuth:', process.env.GITHUB_CLIENT_ID ? 'Configured' : 'Not configured');
+  console.log('Claude API:', process.env.ANTHROPIC_API_KEY ? 'Configured' : 'Not configured');
 });
 
 // Handle unhandled promise rejections

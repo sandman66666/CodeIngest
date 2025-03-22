@@ -1,24 +1,38 @@
 {
   "name": "codeingest",
   "version": "1.0.0",
-  "description": "GitHub code ingestion and analysis app",
-  "main": "index.js",
+  "description": "GitHub Code Ingestion App",
+  "main": "server/src/index.js",
   "scripts": {
+    "start": "node server/src/index.js",
+    "server": "nodemon server/src/index.js",
     "client": "cd client && npm run dev",
-    "server": "cd server && npm run dev",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "install:all": "npm install && cd client && npm install && cd ../server && npm install && cd ../common && npm install"
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install && cd ../common && npm install",
+    "build": "cd client && npm run build",
+    "heroku-postbuild": "npm install && cd client && npm install && npm run build"
+  },
+  "engines": {
+    "node": "18.x"
   },
   "keywords": [
     "github",
     "code",
     "analysis",
-    "claude",
-    "ai"
+    "claude"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "morgan": "^1.10.0",
+    "uuid": "^9.0.1"
+  },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.0.1"
   }
 }
