@@ -441,6 +441,7 @@ app.post('/api/extract/:id', async (req, res) => {
       baseURL: 'https://api.anthropic.com',
       headers: {
         'Content-Type': 'application/json',
+        'anthropic-api-key': apiKey,
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
         'Accept': 'application/json'
