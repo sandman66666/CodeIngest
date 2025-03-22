@@ -530,51 +530,47 @@ app.post('/api/public-repositories', async (req, res) => {
 
 // Add endpoint for private repositories (requires authentication or token)
 app.post('/api/private-repositories', async (req, res) => {
-  // Check if the user is authenticated or provided a personal access token
-  const hasToken = req.body.personalAccessToken && req.body.personalAccessToken.trim().length > 0;
-  
-  if (!req.isAuthenticated() && !hasToken) {
-    return res.status(401).json({ error: 'Authentication required to access private repositories' });
-  }
-
-  console.log(`Private repo ingestion request from ${req.isAuthenticated() ? `user: ${req.user.username}` : 'a personal access token'}`);
-  
   try {
-    const { url, repoFullName, includeAllFiles, personalAccessToken } = req.body;
-    
-    if (!url && !repoFullName) {
-      return res.status(400).json({ error: 'Repository URL or full name is required' });
+    // Check if user is authenticated or has provided a personal access token
+    if (!req.isAuthenticated() && !req.body.personalAccessToken) {
+      return res.status(401).json({ error: 'Authentication required to access private repositories' });
     }
     
-    // Extract owner and repo from the full name
-    let owner, repo;
+    const { url, includeAllFiles = false, personalAccessToken } = req.body;
     
-    if (repoFullName) {
-      [owner, repo] = repoFullName.split('/');
-    } else {
-      // Parse GitHub URL as fallback
-      const githubUrlPattern = /github\.com\/([^\/]+)\/([^\/]+)/;
-      const match = url.match(githubUrlPattern);
-      
-      if (!match) {
-        return res.status(400).json({ error: 'Invalid GitHub repository URL' });
-      }
-      
-      owner = match[1];
-      repo = match[2].replace('.git', '');
+    console.log(`Private repo ingestion request from user: ${req.isAuthenticated() ? req.user.username : 'anonymous'}`);
+    
+    // Parse GitHub URL
+    const repoUrl = new URL(url);
+    const pathSegments = repoUrl.pathname.split('/').filter(Boolean);
+    
+    if (pathSegments.length < 2) {
+      return res.status(400).json({ error: 'Invalid GitHub repository URL' });
     }
+    
+    const owner = pathSegments[0];
+    const repo = pathSegments[1];
     
     console.log(`Attempting to ingest private repository: ${owner}/${repo}`);
     
-    // Create a repository ID
-    const repositoryId = `${owner}-${repo}-${Date.now()}`;
+    // Create GitHub client - prioritize personal access token if provided
+    let githubClient;
+    if (personalAccessToken) {
+      console.log('Using provided personal access token for GitHub API access');
+      githubClient = axios.create({
+        baseURL: 'https://api.github.com',
+        headers: {
+          Accept: 'application/vnd.github.v3+json',
+          Authorization: `token ${personalAccessToken}`
+        },
+        timeout: 10000
+      });
+    } else {
+      console.log('Using OAuth token for GitHub API access');
+      githubClient = createGitHubClient(req);
+    }
     
-    // Create GitHub client with user's auth token or the provided personal access token
-    const githubClient = hasToken 
-      ? createGitHubClientWithToken(personalAccessToken)
-      : createGitHubClient(req);
-    
-    // Fetch repository metadata
+    // Get repository metadata
     console.log(`Fetching repository metadata for ${owner}/${repo}`);
     try {
       const repoResponse = await githubClient.get(`/repos/${owner}/${repo}`);
@@ -582,7 +578,7 @@ app.post('/api/private-repositories', async (req, res) => {
       
       // Create repository object
       const repository = {
-        id: repositoryId,
+        id: `${owner}-${repo}-${Date.now()}`,
         name: repoData.name,
         owner: repoData.owner.login,
         url: repoData.html_url,

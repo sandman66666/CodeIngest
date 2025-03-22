@@ -8,7 +8,7 @@ const Home = () => {
   const { isAuthenticated, user } = useAuth();
   const [url, setUrl] = useState('');
   const [privateUrl, setPrivateUrl] = useState('');
-  const [privateToken, setPrivateToken] = useState('');
+  const [personalAccessToken, setPersonalAccessToken] = useState('');
   const [includeAllFiles, setIncludeAllFiles] = useState(false);
   const [includeAllFilesPrivate, setIncludeAllFilesPrivate] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -260,7 +260,7 @@ const Home = () => {
       return;
     }
     
-    if (!isAuthenticated && !privateToken) {
+    if (!isAuthenticated && !personalAccessToken) {
       setErrorPrivate('You must be signed in or provide a personal access token to ingest private repositories');
       return;
     }
@@ -276,7 +276,7 @@ const Home = () => {
       const response = await axios.post(endpoint, {
         url: privateUrl,
         includeAllFiles: includeAllFilesPrivate,
-        personalAccessToken: privateToken // Send token if provided
+        personalAccessToken: personalAccessToken // Send token if provided
       });
       
       const repository = response.data.repository;
@@ -286,7 +286,7 @@ const Home = () => {
       
       // Clear the form
       setPrivateUrl('');
-      setPrivateToken('');
+      setPersonalAccessToken('');
       setActiveTab('ingested');
       
       // Select the new repository and show modal
@@ -395,9 +395,10 @@ const Home = () => {
           <h2>Ingest a Private Repository</h2>
           <p>Enter a GitHub private repository URL to ingest its code for analysis.</p>
           <p className="auth-note">
-            You're signed in as <strong>{user.displayName}</strong> and can access your private repositories.
+            You are logged in as <span className="font-medium">{user.displayName}</span> via GitHub OAuth.
+            However, GitHub OAuth may not grant sufficient permissions to access all private repositories.
+            For reliable access, please provide a personal access token with the <code className="bg-gray-100 px-1 rounded">repo</code> scope.
           </p>
-          
           {errorPrivate && <div className="alert alert-error">{errorPrivate}</div>}
           
           <form onSubmit={handlePrivateSubmit}>
@@ -414,33 +415,31 @@ const Home = () => {
             </div>
             
             <div className="input-group">
-              <label htmlFor="privateToken">
-                {isAuthenticated 
-                  ? 'Personal Access Token (Optional)' 
-                  : 'Personal Access Token (Required for private repos)'}
+              <label htmlFor="personalAccessToken">
+                Personal Access Token
+                <span className="ml-1 text-red-500">*</span>
               </label>
-              <input
-                type="password"
-                id="privateToken"
-                value={privateToken}
-                onChange={(e) => setPrivateToken(e.target.value)}
-                placeholder={isAuthenticated 
-                  ? "Optional: Only needed if OAuth permissions aren't working" 
-                  : "Enter your GitHub personal access token"}
-                disabled={loadingPrivate}
-              />
-              <small className="helper-text">
-                {isAuthenticated 
-                  ? "You're already authenticated with GitHub OAuth. This field is only needed if you experience permission issues." 
-                  : "Personal access token with 'repo' scope is required for private repositories."} 
+              <div className="mt-1 relative rounded-md shadow-sm">
+                <input
+                  id="personalAccessToken"
+                  type="password"
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                  value={personalAccessToken}
+                  onChange={(e) => setPersonalAccessToken(e.target.value)}
+                  disabled={loadingPrivate}
+                />
+              </div>
+              <p className="mt-1 text-sm text-gray-500">
                 <a 
                   href="https://github.com/settings/tokens/new" 
                   target="_blank" 
                   rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-800"
                 >
                   Create a token
-                </a>
-              </small>
+                </a> with the <code className="bg-gray-100 px-1 rounded">repo</code> scope for full private repository access.
+              </p>
             </div>
             
             <div className="checkbox-group">
