@@ -40,15 +40,23 @@ app.use(morgan('dev'));
 // Session configuration
 app.use(session({
   secret: process.env.SESSION_SECRET || 'codeingest-session-secret',
-  resave: false,
-  saveUninitialized: false,
+  resave: true,
+  saveUninitialized: true,
   cookie: { 
-    secure: process.env.NODE_ENV === 'production', 
+    // Only use secure cookies if we're not using localhost
+    secure: process.env.NODE_ENV === 'production' && !process.env.HEROKU_SKIP_SSL, 
     sameSite: 'lax',
     httpOnly: true,
     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-  }
+  },
+  // Trust the Heroku proxy
+  proxy: true
 }));
+
+// For Heroku HTTPS support
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 
 // Initialize Passport
 app.use(passport.initialize());
@@ -181,29 +189,26 @@ app.get('/auth/github', (req, res, next) => {
     req.session.returnTo = req.query.returnTo;
   }
   
+  console.log('GitHub auth initiated');
   passport.authenticate('github')(req, res, next);
 });
 
 app.get('/auth/github/callback', 
   passport.authenticate('github', { 
-    failureRedirect: '/?error=auth_failed',
-    failWithError: true
+    failureRedirect: '/?error=auth_failed'
   }),
   (req, res) => {
     // Successful authentication, redirect to the intended URL or home
+    console.log('User authenticated successfully:', req.user ? req.user.username : 'unknown user');
     const returnTo = req.session.returnTo || '/';
     delete req.session.returnTo;
     res.redirect(returnTo);
-  },
-  (err, req, res, next) => {
-    // Authentication error handler
-    console.error('GitHub authentication error:', err);
-    res.redirect('/?error=auth_failed');
   }
 );
 
 app.get('/auth/user', (req, res) => {
   console.log('Auth check:', req.isAuthenticated(), req.user ? `User: ${req.user.username}` : 'No user');
+  console.log('Session ID:', req.sessionID);
   
   if (req.isAuthenticated()) {
     res.json({
