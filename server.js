@@ -315,6 +315,11 @@ const isImportantFile = (filePath, extension) => {
     return false;
   }
 
+  // Extract extension from filePath if not provided
+  if (!extension) {
+    extension = path.extname(filePath);
+  }
+
   // Identify important file extensions for business logic
   const importantExtensions = [
     '.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.rb', '.php',
