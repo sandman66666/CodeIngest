@@ -1,16 +1,20 @@
 const express = require('express');
 const cors = require('cors');
+const bodyParser = require('body-parser');
 const morgan = require('morgan');
 const path = require('path');
-const dotenv = require('dotenv');
-const { v4: uuidv4 } = require('uuid');
+const { Octokit } = require('@octokit/rest');
 const axios = require('axios');
 const fs = require('fs');
-const archiver = require('archiver');
-const os = require('os');
-const session = require('express-session');
 const passport = require('passport');
 const GitHubStrategy = require('passport-github2').Strategy;
+const session = require('express-session');
+const PgSession = require('connect-pg-simple')(session);
+const { Pool } = require('pg');
+const dotenv = require('dotenv');
+const { v4: uuidv4 } = require('uuid');
+const archiver = require('archiver');
+const os = require('os');
 
 // Load environment variables
 dotenv.config();
@@ -30,10 +34,10 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-app.use(express.json());
+app.use(bodyParser.json());
 app.use(morgan('dev'));
 
-// Session configuration - non-persistent, memory only
+// Session configuration
 app.use(session({
   secret: process.env.SESSION_SECRET || 'codeingest-session-secret',
   resave: false,
@@ -41,7 +45,8 @@ app.use(session({
   cookie: { 
     secure: process.env.NODE_ENV === 'production', 
     sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    httpOnly: true,
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   }
 }));
 
@@ -49,28 +54,31 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Configure GitHub strategy
+// GitHub OAuth Configuration
 passport.use(new GitHubStrategy({
-    clientID: process.env.GITHUB_CLIENT_ID,
-    clientSecret: process.env.GITHUB_CLIENT_SECRET,
-    // Use a hard-coded callback URL in production to ensure exact match with GitHub settings
-    callbackURL: process.env.NODE_ENV === 'production'
+  clientID: process.env.GITHUB_CLIENT_ID,
+  clientSecret: process.env.GITHUB_CLIENT_SECRET,
+  callbackURL: process.env.GITHUB_CALLBACK_URL || 
+    (process.env.NODE_ENV === 'production' 
       ? 'https://codanalyzer-49ec21ea6aca.herokuapp.com/auth/github/callback'
-      : 'http://localhost:3000/auth/github/callback',
-    scope: ['user:email', 'repo'] // Request access to user's repositories
-  },
-  function(accessToken, refreshToken, profile, done) {
-    // Store only the minimum user data needed
-    const user = {
-      id: profile.id,
-      username: profile.username,
-      displayName: profile.displayName || profile.username,
-      accessToken: accessToken
-    };
-    
-    return done(null, user);
-  }
-));
+      : 'http://localhost:3000/auth/github/callback'),
+  scope: ['user:email', 'repo'], // Request access to user's repositories
+  proxy: true // Important for Heroku's proxy setup
+},
+function(accessToken, refreshToken, profile, done) {
+  // Store comprehensive user data
+  const user = {
+    id: profile.id,
+    username: profile.username,
+    displayName: profile.displayName || profile.username,
+    accessToken: accessToken,
+    emails: profile.emails,
+    avatar: profile._json.avatar_url,
+    lastLogin: new Date()
+  };
+  
+  return done(null, user);
+}));
 
 // Serialize user to session
 passport.serializeUser((user, done) => {
@@ -183,7 +191,10 @@ app.get('/auth/github', (req, res, next) => {
         : 'http://localhost:3000/auth/github/callback'));
   }
   
-  passport.authenticate('github')(req, res, next);
+  passport.authenticate('github', {
+    successReturnToOrRedirect: '/',
+    failureRedirect: '/?error=auth_failed'
+  })(req, res, next);
 });
 
 app.get('/auth/github/callback', 
@@ -194,12 +205,15 @@ app.get('/auth/github/callback',
     }
     
     passport.authenticate('github', { 
-      failureRedirect: '/',
+      failureRedirect: '/?error=auth_failed',
       failWithError: true
     })(req, res, next);
   },
   (req, res) => {
-    // Successful authentication, redirect to the intended URL or home
+    // Successful authentication
+    console.log('User authenticated successfully:', req.user.username);
+    
+    // Redirect to the intended URL or home
     const returnTo = req.session.returnTo || '/';
     delete req.session.returnTo;
     res.redirect(returnTo);
@@ -212,13 +226,16 @@ app.get('/auth/github/callback',
 );
 
 app.get('/auth/user', (req, res) => {
+  console.log('Auth check:', req.isAuthenticated(), req.user ? `User: ${req.user.username}` : 'No user');
+  
   if (req.isAuthenticated()) {
     res.json({
       isAuthenticated: true,
       user: {
         id: req.user.id,
         username: req.user.username,
-        displayName: req.user.displayName
+        displayName: req.user.displayName,
+        avatar: req.user.avatar
       }
     });
   } else {
@@ -229,24 +246,38 @@ app.get('/auth/user', (req, res) => {
 });
 
 app.get('/auth/logout', (req, res, next) => {
-  // Check if logout function exists and is a function
-  if (req.logout) {
-    if (typeof req.logout === 'function') {
-      req.logout((err) => {
-        if (err) { return next(err); }
+  console.log('Logout request received');
+  
+  // Using req.logout() with a callback (Passport v0.6.0+)
+  if (req.logout && typeof req.logout === 'function') {
+    req.logout((err) => {
+      if (err) { 
+        console.error('Logout error:', err);
+        return next(err); 
+      }
+      req.session.destroy((err) => {
+        if (err) {
+          console.error('Session destroy error:', err);
+          return next(err);
+        }
         res.redirect('/');
       });
-    } else {
-      // Older versions of Passport
+    });
+  } else {
+    // Fallback for older Passport versions
+    try {
       req.logout();
+      req.session.destroy((err) => {
+        if (err) {
+          console.error('Session destroy error:', err);
+          return next(err);
+        }
+        res.redirect('/');
+      });
+    } catch (error) {
+      console.error('Logout fallback error:', error);
       res.redirect('/');
     }
-  } else {
-    // No logout function, just destroy session and redirect
-    req.session.destroy((err) => {
-      if (err) { return next(err); }
-      res.redirect('/');
-    });
   }
 });
 
