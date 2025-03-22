@@ -442,7 +442,8 @@ app.post('/api/extract/:id', async (req, res) => {
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
+        'anthropic-version': '2023-06-01',
+        'Accept': 'application/json'
       }
     });
     
@@ -455,7 +456,7 @@ app.post('/api/extract/:id', async (req, res) => {
     
     // Send request to Claude API
     const response = await anthropic.post('/v1/messages', {
-      model: "claude-3-haiku-20240307",
+      model: "claude-3-5-sonnet-20240620",
       max_tokens: 4000,
       temperature: 0.5,
       system: systemPrompt,
