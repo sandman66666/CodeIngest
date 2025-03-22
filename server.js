@@ -425,6 +425,16 @@ app.post('/api/public-repositories', async (req, res) => {
         
         if (fileResponse.data.content) {
           const content = Buffer.from(fileResponse.data.content, 'base64').toString('utf-8');
+          // Add to files array for the new structure
+          repository.files.push({
+            name: path.basename(file.path),
+            path: file.path,
+            content: content,
+            size: file.size || 0,
+            extension: path.extname(file.path)
+          });
+          
+          // Also keep building the allCode string for compatibility
           allCode += `\n\n// File: ${file.path}\n${content}`;
         }
       } catch (error) {
@@ -447,12 +457,10 @@ app.post('/api/public-repositories', async (req, res) => {
       },
       fileCount: filteredFiles.length,
       sizeInBytes: filteredFiles.reduce((sum, file) => sum + file.size, 0),
-      ingestedContent: {
-        tree: fileTree,
-        fullCode: allCode,
-        readme: readmeContent,
-        allFilesIncluded: includeAllFiles
-      }
+      fileTree: fileTree,
+      readme: readmeContent,
+      includesAllFiles: includeAllFiles,
+      files: []
     };
     
     // Store repository in filesystem
@@ -524,7 +532,7 @@ app.post('/api/private-repositories', async (req, res) => {
       isPrivate: repoData.private,
       size: repoData.size,
       createdAt: new Date().toISOString(),
-      files: [],
+      files: [], // Initialize files array
       fileCount: 0,
       totalSize: 0,
       includesAllFiles: includeAllFiles
@@ -554,9 +562,9 @@ app.post('/api/private-repositories', async (req, res) => {
     console.log(`Found ${filteredFiles.length} important files to ingest`);
     
     // Fetch content for each file
-    for (const file of filteredFiles) {
+    for (const item of filteredFiles) {
       try {
-        const fileResponse = await githubClient.get(`/repos/${owner}/${repo}/contents/${file.path}`);
+        const fileResponse = await githubClient.get(`/repos/${owner}/${repo}/contents/${item.path}`);
         let content = fileResponse.data.content;
         
         // GitHub API returns base64 encoded content
@@ -564,15 +572,23 @@ app.post('/api/private-repositories', async (req, res) => {
           content = Buffer.from(content, 'base64').toString('utf-8');
         }
         
-        repository.files.push({
-          name: path.basename(file.path),
-          path: file.path,
-          content: content,
-          size: file.size,
-          extension: path.extname(file.path)
-        });
+        // Ensure files array exists before checking it
+        if (!repository.files) {
+          repository.files = [];
+        }
+        
+        // Add to repository files if not already present
+        if (!repository.files.some(f => f.path === item.path)) {
+          repository.files.push({
+            name: path.basename(item.path),
+            path: item.path,
+            content: content,
+            size: item.size || 0,
+            extension: path.extname(item.path)
+          });
+        }
       } catch (error) {
-        console.error(`Error fetching file ${file.path}:`, error.message);
+        console.error(`Error fetching file ${item.path}:`, error.message);
       }
     }
     
@@ -754,9 +770,13 @@ app.post('/api/repositories/:id/additional-files', async (req, res) => {
     
     // Format the tree for display
     let formattedTree = '';
-    const fileEntries = {};
     let fileCount = 0;
     let totalSize = 0;
+    
+    // Make sure files array exists
+    if (!repository.files) {
+      repository.files = [];
+    }
     
     // Process all files
     for (const item of tree.tree) {
@@ -769,11 +789,17 @@ app.post('/api/repositories/:id/additional-files', async (req, res) => {
           continue;
         }
         
+        // Make sure we handle incoming and outgoing requests properly by adding proper error handling
         try {
           const fileResponse = await github.get(`/repos/${repository.owner}/${repository.name}/contents/${item.path}`);
           const content = fileResponse.data.content 
             ? Buffer.from(fileResponse.data.content, 'base64').toString('utf-8')
             : '';
+          
+          // Ensure files array exists before checking it
+          if (!repository.files) {
+            repository.files = [];
+          }
           
           // Add to repository files if not already present
           if (!repository.files.some(f => f.path === item.path)) {
@@ -956,7 +982,9 @@ app.post('/api/generate-native-app/:id', async (req, res) => {
     }
     
     // Check if it's likely a web app by looking for web-related patterns
-    const codeContent = repository.ingestedContent?.fullCode || '';
+    const codeContent = repository.files.map(file => {
+      return `// File: ${file.path}\n${file.content || '(Binary file or content unavailable)'}\n\n`;
+    }).join('\n');
     
     const webAppPatterns = [
       '<html', '<div', 'react', 'angular', 'vue', 'document.getElementById', 
