@@ -436,16 +436,25 @@ app.post('/api/extract/:id', async (req, res) => {
       return res.status(404).json({ error: 'Repository not found' });
     }
     
-    // Configure Anthropic API client
+    // Configure Anthropic API client with updated headers
+    // Using the latest API standard format (2023-06-01)
+    const headers = {
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01'
+    };
+    
+    // Add API key in the correct format
+    if (apiKey.startsWith('sk-ant-')) {
+      // For Claude API keys that start with sk-ant-
+      headers['x-api-key'] = apiKey;
+    } else {
+      // For API keys in other formats
+      headers['anthropic-api-key'] = apiKey;
+    }
+    
     const anthropic = axios.create({
       baseURL: 'https://api.anthropic.com',
-      headers: {
-        'Content-Type': 'application/json',
-        'anthropic-api-key': apiKey,
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'Accept': 'application/json'
-      }
+      headers
     });
     
     // Prepare code content for analysis
@@ -454,6 +463,12 @@ app.post('/api/extract/:id', async (req, res) => {
     
     // Create prompt for Claude
     const systemPrompt = "You are an expert code analyzer. Extract the core algorithms and key elements from the provided code. Focus on the most important parts that help understand how the code works.";
+    
+    // Log API request (excluding the full code content for brevity)
+    console.log('Sending request to Claude API with:');
+    console.log('- Model:', 'claude-3-5-sonnet-20240620');
+    console.log('- Headers:', JSON.stringify(headers, null, 2));
+    console.log('- System prompt:', systemPrompt);
     
     // Send request to Claude API
     const response = await anthropic.post('/v1/messages', {
@@ -487,6 +502,10 @@ Extract and present only the core algorithms and key elements from this code wit
     });
   } catch (error) {
     console.error('Error extracting code:', error.message);
+    console.error('Error response data:', error.response?.data);
+    console.error('Error status:', error.response?.status);
+    console.error('Error headers:', error.response?.headers);
+    
     return res.status(error.response?.status || 500).json({ 
       error: error.response?.data?.message || 'Failed to extract code' 
     });
