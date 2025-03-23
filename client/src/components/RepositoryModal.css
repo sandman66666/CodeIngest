@@ -1,0 +1,251 @@
+/* Repository Modal Styles */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background-color: white;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 1200px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #64748b;
+}
+
+.modal-body {
+  flex: 1;
+  overflow: auto;
+  padding: 1.5rem;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.tab {
+  padding: 0.8rem 1.2rem;
+  cursor: pointer;
+  color: #64748b;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.tab.active {
+  color: #4f46e5;
+  border-bottom: 2px solid #4f46e5;
+}
+
+.tab-content {
+  display: none;
+  padding: 1rem 0;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* File Selection Container */
+.file-selection-container {
+  display: flex;
+  height: 600px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.selection-panel {
+  width: 40%;
+  border-right: 1px solid #e2e8f0;
+  padding: 1rem;
+  overflow: auto;
+}
+
+.digest-panel {
+  width: 60%;
+  padding: 1rem;
+  overflow: auto;
+}
+
+/* Tree View Styles */
+.tree-view {
+  font-family: monospace;
+  white-space: pre;
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  background-color: #f8fafc;
+  height: 100%;
+  max-height: 600px;
+}
+
+/* Selectable Tree View Styles */
+.selectable-tree-view {
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: auto;
+  max-height: 400px;
+}
+
+.tree-node {
+  margin: 4px 0;
+  padding: 2px 0;
+}
+
+.directory-name {
+  font-weight: bold;
+  margin-top: 8px;
+  color: #1e293b;
+}
+
+.directory-children {
+  padding-left: 20px;
+  border-left: 1px solid #e2e8f0;
+  margin-left: 4px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+}
+
+.file-name {
+  margin-left: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.business-logic {
+  font-weight: 500;
+  color: #4f46e5;
+}
+
+.file-size {
+  margin-left: 8px;
+  font-size: 0.8em;
+  color: #64748b;
+}
+
+/* Code View */
+.code-view {
+  font-family: monospace;
+  white-space: pre;
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  background-color: #f8fafc;
+  min-height: 400px;
+  max-height: 500px;
+}
+
+/* Empty State */
+.empty-state {
+  color: #64748b;
+  text-align: center;
+  padding: 2rem 0;
+  font-style: italic;
+}
+
+/* Button Styles */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.button-primary {
+  background-color: #4f46e5;
+  color: white;
+  border: none;
+}
+
+.button-primary:hover {
+  background-color: #4338ca;
+}
+
+.button-primary:disabled {
+  background-color: #e2e8f0;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.button-outline {
+  background-color: transparent;
+  color: #4f46e5;
+  border: 1px solid #4f46e5;
+}
+
+.button-outline:hover {
+  background-color: #f8fafc;
+}
+
+/* Spinner */
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Alert Messages */
+.alert {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  border-radius: 4px;
+}
+
+.alert-error {
+  background-color: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
