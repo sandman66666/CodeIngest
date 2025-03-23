@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { ingestRepository, getAdditionalFiles } = require('../services/code-ingestion');
+const { ingestRepository, getAdditionalFiles, generateDigestForFiles } = require('../services/code-ingestion');
 const { analyzeCodeWithClaude, extractCodeElements } = require('../services/claude-service');
 const { validateGitHubUrl } = require('common');
 
@@ -102,7 +102,8 @@ router.post('/public-repositories', async (req, res) => {
           readme: ingestionResult.readme,
           businessLogicFiles: ingestionResult.businessLogicFiles,
           otherFiles: ingestionResult.otherFiles,
-          allFilesIncluded: ingestionResult.allFilesIncluded
+          allFilesIncluded: ingestionResult.allFilesIncluded,
+          allFiles: ingestionResult.allFiles
         }
       };
       
@@ -343,6 +344,42 @@ router.get('/analysis/:id', (req, res) => {
   } catch (error) {
     console.error(`Error retrieving analysis: ${error.message}`);
     return res.status(500).json({ error: 'Failed to retrieve analysis results' });
+  }
+});
+
+// Generate digest for selected files
+router.post('/repositories/:id/generate-digest', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { filePaths } = req.body;
+    
+    if (!filePaths || !Array.isArray(filePaths) || filePaths.length === 0) {
+      return res.status(400).json({ error: 'File paths must be a non-empty array' });
+    }
+    
+    const repository = store.getRepositoryById(id);
+    
+    if (!repository) {
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+    
+    try {
+      // Generate digest for selected files
+      const digest = await generateDigestForFiles(
+        repository.owner,
+        repository.name,
+        'main', // We could store the branch in the repository object
+        filePaths
+      );
+      
+      return res.json({ digest });
+    } catch (error) {
+      console.error('Error generating digest:', error);
+      return res.status(500).json({ error: `Error generating digest: ${error.message}` });
+    }
+  } catch (error) {
+    console.error('Unexpected error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

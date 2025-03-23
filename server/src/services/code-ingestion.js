@@ -161,10 +161,51 @@ async function ingestRepository(url, includeAllFiles = false) {
       readme: readmeContent,
       businessLogicFiles: businessLogicFiles.map(f => f.path),
       otherFiles: otherFiles.map(f => f.path),
-      allFilesIncluded: includeAllFiles
+      allFilesIncluded: includeAllFiles,
+      // Add all files information for selectable tree
+      allFiles: allFiles.map(file => ({
+        path: file.path,
+        type: file.type,
+        size: file.size,
+        isBusinessLogic: file.isBusinessLogic
+      }))
     };
   } catch (error) {
     console.error('Error during repository ingestion:', error);
+    throw error;
+  }
+}
+
+// Function to generate a digest for selected files
+async function generateDigestForFiles(repoOwner, repoName, branch, filePaths) {
+  try {
+    const consolidatedCode = [];
+    
+    for (const path of filePaths) {
+      try {
+        // Get file content from GitHub
+        const fileContent = await githubApi.getFileContent(repoOwner, repoName, path, branch);
+        
+        if (fileContent) {
+          consolidatedCode.push(
+            `// *************************************************`,
+            `// File: ${path}`,
+            `// *************************************************`,
+            ``,
+            fileContent,
+            ``,
+            ``
+          );
+        }
+      } catch (error) {
+        console.error(`Error fetching content for ${path}:`, error.message);
+        // Continue with other files even if one fails
+      }
+    }
+    
+    return consolidatedCode.join('\n');
+  } catch (error) {
+    console.error('Error generating digest:', error);
     throw error;
   }
 }
@@ -221,5 +262,6 @@ async function getAdditionalFiles(repoOwner, repoName, branch, filePaths) {
 
 module.exports = { 
   ingestRepository,
-  getAdditionalFiles
+  getAdditionalFiles,
+  generateDigestForFiles
 };
