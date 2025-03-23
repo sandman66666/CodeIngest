@@ -190,10 +190,15 @@ const RepositoryModal = ({ repository, onClose }) => {
             <div className="file-selection-container">
               <div className="selection-panel">
                 <h3>Select Files</h3>
-                {fullRepo.ingestedContent?.allFiles ? (
+                {fullRepo.ingestedContent?.allFiles || fullRepo.files ? (
                   <>
                     <SelectableTreeView 
-                      files={fullRepo.ingestedContent.allFiles}
+                      files={fullRepo.ingestedContent?.allFiles || fullRepo.files.map(file => ({
+                        path: file.path,
+                        type: 'blob',
+                        size: file.size,
+                        isBusinessLogic: file.extension && ['.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.rb', '.go', '.php'].includes(file.extension)
+                      }))}
                       selectedFiles={selectedFiles}
                       onFileSelect={setSelectedFiles}
                     />
