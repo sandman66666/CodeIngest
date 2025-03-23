@@ -6,7 +6,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: var(--modal-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -14,14 +14,15 @@
 }
 
 .modal {
-  background-color: white;
+  background-color: var(--card-background);
   border-radius: 8px;
   width: 90%;
   max-width: 1200px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px var(--shadow-color);
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .modal-header {
@@ -29,13 +30,15 @@
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.5rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--border-color);
+  transition: border-color 0.3s ease;
 }
 
 .modal-title {
   margin: 0;
   font-size: 1.2rem;
   font-weight: 600;
+  color: var(--text-color);
 }
 
 .modal-close {
@@ -43,32 +46,35 @@
   border: none;
   font-size: 1.5rem;
   cursor: pointer;
-  color: #64748b;
+  color: var(--secondary-color);
+  transition: color 0.3s ease;
 }
 
 .modal-body {
   flex: 1;
   overflow: auto;
   padding: 1.5rem;
+  color: var(--text-color);
 }
 
 /* Tabs */
 .tabs {
   display: flex;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--border-color);
+  transition: border-color 0.3s ease;
 }
 
 .tab {
   padding: 0.8rem 1.2rem;
   cursor: pointer;
-  color: #64748b;
+  color: var(--secondary-color);
   font-weight: 500;
   transition: all 0.2s ease;
 }
 
 .tab.active {
-  color: #4f46e5;
-  border-bottom: 2px solid #4f46e5;
+  color: var(--primary-color);
+  border-bottom: 2px solid var(--primary-color);
 }
 
 .tab-content {
@@ -84,24 +90,26 @@
 .file-selection-container {
   display: flex;
   height: 450px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   overflow: hidden;
   margin-top: 0.5rem;
+  transition: border-color 0.3s ease;
 }
 
 .selection-panel {
   width: 40%;
-  border-right: 1px solid #e2e8f0;
+  border-right: 1px solid var(--border-color);
   padding: 0.5rem;
   overflow: auto;
+  transition: border-color 0.3s ease;
 }
 
 .selection-panel h3 {
   margin-top: 0;
   margin-bottom: 0.5rem;
   font-size: 1rem;
-  color: #4b5563;
+  color: var(--text-color);
 }
 
 .digest-panel {
@@ -114,7 +122,7 @@
   margin-top: 0;
   margin-bottom: 0.5rem;
   font-size: 1rem;
-  color: #4b5563;
+  color: var(--text-color);
 }
 
 .selection-info {
@@ -123,10 +131,11 @@
   justify-content: space-between;
   margin-bottom: 0.5rem;
   font-size: 0.85em;
-  color: #64748b;
-  background-color: #f8fafc;
+  color: var(--secondary-color);
+  background-color: var(--background-color);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Tree View Styles */
@@ -135,11 +144,12 @@
   white-space: pre;
   overflow: auto;
   padding: 1rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-color);
   border-radius: 4px;
-  background-color: #f8fafc;
+  background-color: var(--code-background);
   height: 100%;
   max-height: 600px;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 /* Selectable Tree View Styles */
@@ -150,6 +160,8 @@
   max-height: 330px;
   padding-right: 0.5rem;
   font-size: 0.9em;
+  color: var(--text-color);
+  transition: color 0.3s ease;
 }
 
 .tree-node {
@@ -167,14 +179,16 @@
 
 .directory-name {
   font-weight: bold;
-  color: #1e293b;
+  color: var(--text-color);
   margin-left: 6px;
+  transition: color 0.3s ease;
 }
 
 .directory-children {
   padding-left: 16px;
-  border-left: 1px solid #e2e8f0;
+  border-left: 1px solid var(--border-color);
   margin-left: 6px;
+  transition: border-color 0.3s ease;
 }
 
 /* Checkbox and label styling */
@@ -199,17 +213,21 @@
   margin-left: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--text-color);
+  transition: color 0.3s ease;
 }
 
 .business-logic {
   font-weight: 500;
-  color: #4f46e5;
+  color: var(--primary-color);
+  transition: color 0.3s ease;
 }
 
 .file-size {
   margin-left: 6px;
   font-size: 0.75em;
-  color: #64748b;
+  color: var(--secondary-color);
+  transition: color 0.3s ease;
 }
 
 /* Code View */
@@ -218,12 +236,13 @@
   white-space: pre;
   overflow: auto;
   padding: 0.5rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-color);
   border-radius: 4px;
-  background-color: #f8fafc;
+  background-color: var(--code-background);
   min-height: 330px;
   max-height: 330px;
   font-size: 0.9em;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 /* Empty State */
@@ -333,6 +352,7 @@
 
 .section-title h3 {
   margin: 0;
+  color: var(--text-color);
 }
 
 .copy-button {
@@ -341,23 +361,24 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: white;
-  border: 1px solid #e2e8f0;
+  background-color: var(--card-background);
+  border: 1px solid var(--border-color);
   border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px var(--shadow-color);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .copy-button:hover {
-  background-color: #f8fafc;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background-color: var(--background-color);
+  box-shadow: 0 2px 4px var(--shadow-color);
 }
 
 .copy-button svg {
   width: 18px;
   height: 18px;
-  color: #334155;
+  color: var(--text-color);
+  transition: color 0.3s ease;
 }
 
 /* Content container */
@@ -396,8 +417,9 @@
   overflow-x: auto;
   padding: 1rem;
   border-radius: 4px;
-  background-color: #f8fafc;
+  background-color: var(--code-background);
   user-select: text;
+  transition: background-color 0.3s ease;
 }
 
 .tree-view pre, .code-view pre, .readme-view pre {
@@ -417,13 +439,13 @@
   position: absolute;
   bottom: 0.5rem;
   right: 0.5rem;
-  background-color: rgba(255, 255, 255, 0.8);
+  background-color: var(--card-background);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--secondary-color);
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.3s ease, background-color 0.3s ease, color 0.3s ease;
 }
 
 .tree-view:hover::after, .code-view:hover::after, .readme-view:hover::after {
@@ -440,7 +462,8 @@
     background-color: transparent;
   }
   50% {
-    background-color: rgba(59, 130, 246, 0.2);
+    background-color: var(--primary-color);
+    opacity: 0.2;
   }
   100% {
     background-color: transparent;
