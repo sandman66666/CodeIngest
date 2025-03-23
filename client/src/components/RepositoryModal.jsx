@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import SmartCodeExtractor from './SmartCodeExtractor';
 import NativeAppGenerator from './NativeAppGenerator';
@@ -12,29 +12,68 @@ const RepositoryModal = ({ repository, onClose }) => {
   const [error, setError] = useState('');
   const [fullRepo, setFullRepo] = useState(null);
   const [loadingAdditionalFiles, setLoadingAdditionalFiles] = useState(false);
+  // State for selected files (currently just visual, no functionality)
   const [selectedFiles, setSelectedFiles] = useState([]);
-  const [generatedDigest, setGeneratedDigest] = useState('');
-  const [generatingDigest, setGeneratingDigest] = useState(false);
-
-  // Handle generating digest for selected files
-  const handleGenerateDigest = async () => {
-    if (selectedFiles.length === 0) return;
-    
-    setGeneratingDigest(true);
-    setError('');
-    
-    try {
-      const response = await axios.post(`/api/repositories/${fullRepo.id}/generate-digest`, {
-        filePaths: selectedFiles
-      });
-      
-      setGeneratedDigest(response.data.digest);
-    } catch (error) {
-      setError(error.response?.data?.error || 'Failed to generate digest');
-    } finally {
-      setGeneratingDigest(false);
-    }
+  // State for copy feedback
+  const [copyFeedback, setCopyFeedback] = useState({ visible: false, message: '', success: true });
+  // Refs for content elements
+  const structureRef = useRef(null);
+  const codeRef = useRef(null);
+  const readmeRef = useRef(null);
+  
+  // Store copy button refs to animate them
+  const copyButtonRefs = {
+    structure: useRef(null),
+    code: useRef(null),
+    readme: useRef(null)
   };
+  
+  // Helper function to copy text to clipboard
+  const copyToClipboard = (text, sourceName, buttonRef) => {
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        setCopyFeedback({ visible: true, message: `${sourceName} copied to clipboard!`, success: true });
+        setTimeout(() => setCopyFeedback({ visible: false, message: '', success: true }), 2000);
+        
+        // Animate the button on successful copy
+        if (buttonRef && buttonRef.current) {
+          buttonRef.current.classList.add('copy-success');
+          setTimeout(() => {
+            if (buttonRef.current) {
+              buttonRef.current.classList.remove('copy-success');
+            }
+          }, 1000);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to copy text: ', err);
+        setCopyFeedback({ visible: true, message: 'Failed to copy text', success: false });
+        setTimeout(() => setCopyFeedback({ visible: false, message: '', success: true }), 2000);
+      });
+  };
+
+  // Helper function to get file content for selected files
+  const getFilteredFiles = () => {
+    if (!fullRepo?.files) {
+      return [];
+    }
+    
+    // If no files are selected, show all files
+    if (!selectedFiles.length) {
+      return fullRepo.files;
+    }
+    
+    // Filter the files array to include only selected files
+    return fullRepo.files.filter(file => selectedFiles.includes(file.path));
+  };
+
+  // Initialize all files as selected
+  useEffect(() => {
+    if (fullRepo?.files) {
+      const allFilePaths = fullRepo.files.map(file => file.path);
+      setSelectedFiles(allFilePaths);
+    }
+  }, [fullRepo?.files]);
 
   useEffect(() => {
     // If we don't have the full repository data, fetch it
@@ -159,6 +198,13 @@ const RepositoryModal = ({ repository, onClose }) => {
         <div className="modal-body">
           {error && <div className="alert alert-error">{error}</div>}
           
+          {copyFeedback.visible && (
+            <div className={`alert ${copyFeedback.success ? 'alert-success' : 'alert-error'}`} 
+                 style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 1000 }}>
+              {copyFeedback.message}
+            </div>
+          )}
+          
           {!fullRepo.includesAllFiles && (
             <div className="alert" style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
               <p>
@@ -181,8 +227,27 @@ const RepositoryModal = ({ repository, onClose }) => {
           )}
           
           <div className={`tab-content ${activeTab === 'structure' ? 'active' : ''}`}>
-            <div className="tree-view">
-              {fullRepo.fileTree || 'No folder structure available'}
+            <div className="section-title">
+              <h3>Folder Structure</h3>
+              <button 
+                ref={copyButtonRefs.structure}
+                className="copy-button" 
+                onClick={() => copyToClipboard(
+                  fullRepo.fileTree || 'No folder structure available', 
+                  'Folder structure',
+                  copyButtonRefs.structure
+                )}
+                title="Copy to clipboard"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                </svg>
+              </button>
+            </div>
+            <div className="content-container">
+              <div className="tree-view" ref={structureRef}>
+                {fullRepo.fileTree || 'No folder structure available'}
+              </div>
             </div>
           </div>
           
@@ -190,60 +255,107 @@ const RepositoryModal = ({ repository, onClose }) => {
             <div className="file-selection-container">
               <div className="selection-panel">
                 <h3>Select Files</h3>
+                <div className="selection-info">
+                  {fullRepo?.files && (
+                    selectedFiles.length === 0 ? (
+                      <span>Showing all files ({fullRepo.files.length})</span>
+                    ) : selectedFiles.length === fullRepo.files.length ? (
+                      <span>All files selected ({selectedFiles.length})</span>
+                    ) : (
+                      <>
+                        <span>Showing {selectedFiles.length} of {fullRepo.files.length} files</span>
+                        <button 
+                          onClick={() => {
+                            // Select all files when "Show All" is clicked
+                            const allFilePaths = fullRepo.files.map(file => file.path);
+                            setSelectedFiles(allFilePaths);
+                          }}
+                          className="button button-small button-outline"
+                        >
+                          Select All
+                        </button>
+                      </>
+                    )
+                  )}
+                </div>
                 {fullRepo.ingestedContent?.allFiles || fullRepo.files ? (
-                  <>
-                    <SelectableTreeView 
-                      files={fullRepo.ingestedContent?.allFiles || fullRepo.files.map(file => ({
-                        path: file.path,
-                        type: 'blob',
-                        size: file.size,
-                        isBusinessLogic: file.extension && ['.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.rb', '.go', '.php'].includes(file.extension)
-                      }))}
-                      selectedFiles={selectedFiles}
-                      onFileSelect={setSelectedFiles}
-                    />
-                    <button 
-                      className="button button-primary"
-                      onClick={handleGenerateDigest}
-                      disabled={generatingDigest || selectedFiles.length === 0}
-                      style={{ marginTop: '1rem' }}
-                    >
-                      {generatingDigest ? (
-                        <>
-                          <span className="spinner"></span>
-                          <span>Generating...</span>
-                        </>
-                      ) : 'Generate Digest'}
-                    </button>
-                  </>
+                  <SelectableTreeView 
+                    files={fullRepo.ingestedContent?.allFiles || fullRepo.files.map(file => ({
+                      path: file.path,
+                      type: 'blob',
+                      size: file.size,
+                      isBusinessLogic: file.isBusinessLogic
+                    }))}
+                    selectedFiles={selectedFiles}
+                    onFileSelect={setSelectedFiles}
+                  />
                 ) : (
                   <p>No file information available</p>
                 )}
               </div>
               <div className="digest-panel">
-                <h3>Generated Code Digest</h3>
-                {generatedDigest ? (
-                  <pre className="code-view">{generatedDigest}</pre>
-                ) : (
-                  <p className="empty-state">Select files and click "Generate Digest" to see code content</p>
-                )}
+                <div className="section-title">
+                  <h3>Generated Code Digest</h3>
+                  <button 
+                    ref={copyButtonRefs.code}
+                    className="copy-button" 
+                    onClick={() => {
+                      const codeContent = fullRepo.files && fullRepo.files.length > 0 
+                        ? getFilteredFiles().map(file => `// File: ${file.path}\n${file.content || '(Binary file or content unavailable)'}\n\n`).join('\n')
+                        : 'No code content available';
+                      copyToClipboard(codeContent, 'Code digest', copyButtonRefs.code);
+                    }}
+                    title="Copy to clipboard"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="content-container">
+                  <div className="code-view" ref={codeRef}>
+                    <pre>{fullRepo.files && fullRepo.files.length > 0 
+                      ? getFilteredFiles().map(file => `// File: ${file.path}\n${file.content || '(Binary file or content unavailable)'}\n\n`).join('\n')
+                      : 'No code content available'}</pre>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
           
           <div className={`tab-content ${activeTab === 'readme' ? 'active' : ''}`}>
-            <div className="readme-view">
-              {fullRepo.readme ? (
-                <pre>{fullRepo.readme}</pre>
-              ) : (
-                <p>No README file found in this repository.</p>
-              )}
+            <div className="section-title">
+              <h3>README</h3>
+              <button 
+                ref={copyButtonRefs.readme}
+                className="copy-button" 
+                onClick={() => copyToClipboard(
+                  fullRepo.readme || 'No README file found in this repository.', 
+                  'README',
+                  copyButtonRefs.readme
+                )}
+                title="Copy to clipboard"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                </svg>
+              </button>
+            </div>
+            <div className="content-container">
+              <div className="readme-view" ref={readmeRef}>
+                {fullRepo.readme ? (
+                  <pre>{fullRepo.readme}</pre>
+                ) : (
+                  <p>No README file found in this repository.</p>
+                )}
+              </div>
             </div>
           </div>
           
           <div className={`tab-content ${activeTab === 'extractor' ? 'active' : ''}`}>
             <SmartCodeExtractor
               repositoryId={fullRepo.id}
+              onCopy={(text, sourceName, buttonRef) => copyToClipboard(text, sourceName, buttonRef)}
             />
           </div>
           
@@ -252,6 +364,7 @@ const RepositoryModal = ({ repository, onClose }) => {
               repositoryId={fullRepo.id}
               hasGeneratedApp={!!fullRepo.nativeApp}
               swiftCode={fullRepo.nativeApp?.swiftCode}
+              onCopy={(text, sourceName, buttonRef) => copyToClipboard(text, sourceName, buttonRef)}
             />
           </div>
         </div>

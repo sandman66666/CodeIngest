@@ -83,23 +83,50 @@
 /* File Selection Container */
 .file-selection-container {
   display: flex;
-  height: 600px;
+  height: 450px;
   border: 1px solid #e2e8f0;
   border-radius: 6px;
   overflow: hidden;
+  margin-top: 0.5rem;
 }
 
 .selection-panel {
   width: 40%;
   border-right: 1px solid #e2e8f0;
-  padding: 1rem;
+  padding: 0.5rem;
   overflow: auto;
+}
+
+.selection-panel h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  color: #4b5563;
 }
 
 .digest-panel {
   width: 60%;
-  padding: 1rem;
+  padding: 0.5rem;
   overflow: auto;
+}
+
+.digest-panel h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  color: #4b5563;
+}
+
+.selection-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  font-size: 0.85em;
+  color: #64748b;
+  background-color: #f8fafc;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
 }
 
 /* Tree View Styles */
@@ -120,33 +147,56 @@
   font-family: monospace;
   white-space: nowrap;
   overflow: auto;
-  max-height: 400px;
+  max-height: 330px;
+  padding-right: 0.5rem;
+  font-size: 0.9em;
 }
 
 .tree-node {
-  margin: 4px 0;
-  padding: 2px 0;
+  margin: 1px 0;
+  padding: 1px 0;
+}
+
+/* Directory styling */
+.directory-header {
+  display: flex;
+  align-items: center;
+  padding: 1px 0;
+  margin-top: 2px;
 }
 
 .directory-name {
   font-weight: bold;
-  margin-top: 8px;
   color: #1e293b;
+  margin-left: 6px;
 }
 
 .directory-children {
-  padding-left: 20px;
+  padding-left: 16px;
   border-left: 1px solid #e2e8f0;
-  margin-left: 4px;
+  margin-left: 6px;
 }
 
+/* Checkbox and label styling */
 .checkbox-label {
   display: flex;
   align-items: center;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+}
+
+/* Indeterminate checkbox styling */
+.checkbox-label input[type="checkbox"]:indeterminate {
+  opacity: 0.7;
 }
 
 .file-name {
-  margin-left: 8px;
+  margin-left: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -157,8 +207,8 @@
 }
 
 .file-size {
-  margin-left: 8px;
-  font-size: 0.8em;
+  margin-left: 6px;
+  font-size: 0.75em;
   color: #64748b;
 }
 
@@ -167,20 +217,30 @@
   font-family: monospace;
   white-space: pre;
   overflow: auto;
-  padding: 1rem;
+  padding: 0.5rem;
   border: 1px solid #e2e8f0;
   border-radius: 4px;
   background-color: #f8fafc;
-  min-height: 400px;
-  max-height: 500px;
+  min-height: 330px;
+  max-height: 330px;
+  font-size: 0.9em;
 }
 
 /* Empty State */
 .empty-state {
   color: #64748b;
   text-align: center;
-  padding: 2rem 0;
+  padding: 1rem 0;
   font-style: italic;
+  font-size: 0.9em;
+}
+
+/* Alert/Notice styling */
+.alert {
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  border-radius: 4px;
+  font-size: 0.9em;
 }
 
 /* Button Styles */
@@ -188,11 +248,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.5rem 1rem;
+  padding: 0.4rem 0.8rem;
   border-radius: 4px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
+  font-size: 0.9em;
+}
+
+.button-small {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8em;
 }
 
 .button-primary {
@@ -248,4 +314,160 @@
   background-color: #fee2e2;
   color: #b91c1c;
   border: 1px solid #fecaca;
+}
+
+/* Copy functionality styles */
+.content-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.section-title h3 {
+  margin: 0;
+}
+
+.copy-button {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.copy-button:hover {
+  background-color: #f8fafc;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.copy-button svg {
+  width: 18px;
+  height: 18px;
+  color: #334155;
+}
+
+/* Content container */
+.content-container {
+  position: relative;
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+/* Remove the shortcut hint styling */
+.content-shortcut-hint {
+  display: none;
+}
+
+/* Animation for copy success */
+.copy-success {
+  animation: pulse-success 1s ease-in-out;
+}
+
+@keyframes pulse-success {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+    background-color: #dcfce7;
+    border-color: #86efac;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.tree-view, .code-view, .readme-view {
+  position: relative;
+  overflow-x: auto;
+  padding: 1rem;
+  border-radius: 4px;
+  background-color: #f8fafc;
+  user-select: text;
+}
+
+.tree-view pre, .code-view pre, .readme-view pre {
+  white-space: pre-wrap;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Make selectable content more obvious */
+.tree-view:hover, .code-view:hover, .readme-view:hover {
+  outline: 1px solid #e2e8f0;
+}
+
+/* Double-click text selection hint */
+.tree-view::after, .code-view::after, .readme-view::after {
+  content: "Double-click to select text";
+  position: absolute;
+  bottom: 0.5rem;
+  right: 0.5rem;
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  color: #64748b;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.tree-view:hover::after, .code-view:hover::after, .readme-view:hover::after {
+  opacity: 1;
+}
+
+/* Highlight effect for copied content */
+.highlight-copied {
+  animation: highlight-flash 0.5s ease-in-out;
+}
+
+@keyframes highlight-flash {
+  0% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: rgba(59, 130, 246, 0.2);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 640px) {
+  .content-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .copy-options-container {
+    margin-top: 0.5rem;
+    width: 100%;
+  }
+  
+  .copy-dropdown {
+    flex-grow: 1;
+  }
+  
+  .copy-dropdown button {
+    width: 100%;
+  }
+}
+
+.copy-button-fixed {
+  display: none;
 }
