@@ -1,13 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
-const NativeAppGenerator = ({ repositoryId, hasGeneratedApp, swiftCode }) => {
+const NativeAppGenerator = ({ 
+  repositoryId, 
+  hasGeneratedApp, 
+  swiftCode,
+  onCopy,
+}) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [generatedCode, setGeneratedCode] = useState(swiftCode || '');
   const [status, setStatus] = useState(hasGeneratedApp ? 'completed' : 'not_started');
   const [polling, setPolling] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const codeRef = useRef(null);
+  const copyButtonRef = useRef(null);
 
   // Check status if already in progress
   useEffect(() => {
@@ -126,22 +133,26 @@ const NativeAppGenerator = ({ repositoryId, hasGeneratedApp, swiftCode }) => {
       
       {generatedCode && status === 'completed' && (
         <div className="generated-code">
-          <h3>Generated Swift Code</h3>
-          <div className="code-view">
-            <pre>{generatedCode}</pre>
+          <div className="section-title">
+            <h3>Generated Swift Code</h3>
+            <button 
+              ref={copyButtonRef}
+              className="copy-button" 
+              onClick={() => onCopy(generatedCode, 'iOS App code', copyButtonRef)}
+              title="Copy to clipboard"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+              </svg>
+            </button>
+          </div>
+          <div className="content-container">
+            <div className="code-view" ref={codeRef}>
+              <pre>{generatedCode}</pre>
+            </div>
           </div>
           
           <div className="button-group">
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(generatedCode);
-                alert('Swift code copied to clipboard!');
-              }}
-              className="button button-outline copy-button"
-            >
-              Copy to Clipboard
-            </button>
-            
             <button
               onClick={handleDownloadProject}
               disabled={downloading}

@@ -1,6 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const SelectableTreeView = ({ files, selectedFiles, onFileSelect }) => {
+  // Function to collect all file paths within a directory
+  const getAllFilePaths = (node) => {
+    let paths = [];
+    
+    if (node.isFile) {
+      return [node.path];
+    }
+    
+    // Recursively collect paths from all children
+    Object.values(node.children).forEach(childNode => {
+      if (childNode.isFile) {
+        paths.push(childNode.path);
+      } else {
+        paths = [...paths, ...getAllFilePaths(childNode)];
+      }
+    });
+    
+    return paths;
+  };
+  
+  // Check directory selection status (all, some, or none)
+  const getDirectorySelectionStatus = (node) => {
+    const filePaths = getAllFilePaths(node);
+    const selectedCount = filePaths.filter(path => selectedFiles.includes(path)).length;
+    
+    if (selectedCount === 0) return 'none';
+    if (selectedCount === filePaths.length) return 'all';
+    return 'some';
+  };
   // Convert flat file array to hierarchical structure
   const buildTreeStructure = (files) => {
     const tree = {};
@@ -40,14 +69,34 @@ const SelectableTreeView = ({ files, selectedFiles, onFileSelect }) => {
     }
   }, [files]);
 
-  // Handle checkbox changes
-  const handleFileSelect = (path, isChecked) => {
-    let updatedSelection;
+  // Handle checkbox changes for both files and directories
+  const handleSelectionChange = (node, isChecked) => {
+    let updatedSelection = [...selectedFiles];
     
-    if (isChecked) {
-      updatedSelection = [...selectedFiles, path];
+    if (node.isFile) {
+      // For files, simply toggle selection
+      if (isChecked) {
+        if (!updatedSelection.includes(node.path)) {
+          updatedSelection.push(node.path);
+        }
+      } else {
+        updatedSelection = updatedSelection.filter(p => p !== node.path);
+      }
     } else {
-      updatedSelection = selectedFiles.filter(p => p !== path);
+      // For directories, toggle all files within
+      const directoryFiles = getAllFilePaths(node);
+      
+      if (isChecked) {
+        // Add all files that aren't already selected
+        directoryFiles.forEach(path => {
+          if (!updatedSelection.includes(path)) {
+            updatedSelection.push(path);
+          }
+        });
+      } else {
+        // Remove all files in this directory
+        updatedSelection = updatedSelection.filter(path => !directoryFiles.includes(path));
+      }
     }
     
     onFileSelect(updatedSelection);
@@ -56,6 +105,19 @@ const SelectableTreeView = ({ files, selectedFiles, onFileSelect }) => {
   // Recursive component to render tree nodes
   const TreeNode = ({ name, node, path }) => {
     const currentPath = path ? `${path}/${name}` : name;
+    const checkboxRef = useRef(null);
+    
+    // For directory nodes, determine selection status
+    const dirStatus = !node.isFile ? getDirectorySelectionStatus(node) : null;
+    const isChecked = node.isFile ? selectedFiles.includes(node.path) : dirStatus === 'all';
+    const isIndeterminate = !node.isFile && dirStatus === 'some';
+    
+    // Set indeterminate state for directory checkboxes
+    useEffect(() => {
+      if (checkboxRef.current && !node.isFile) {
+        checkboxRef.current.indeterminate = isIndeterminate;
+      }
+    }, [isIndeterminate, node.isFile]);
     
     if (node.isFile) {
       return (
@@ -63,8 +125,8 @@ const SelectableTreeView = ({ files, selectedFiles, onFileSelect }) => {
           <label className="checkbox-label">
             <input 
               type="checkbox"
-              checked={selectedFiles.includes(node.path)}
-              onChange={(e) => handleFileSelect(node.path, e.target.checked)}
+              checked={isChecked}
+              onChange={(e) => handleSelectionChange(node, e.target.checked)}
             />
             <span className={`file-name ${node.isBusinessLogic ? 'business-logic' : ''}`}>
               {name}
@@ -80,7 +142,17 @@ const SelectableTreeView = ({ files, selectedFiles, onFileSelect }) => {
     // It's a directory
     return (
       <div className="tree-node directory">
-        <div className="directory-name">{name}</div>
+        <div className="directory-header">
+          <label className="checkbox-label">
+            <input 
+              ref={checkboxRef}
+              type="checkbox"
+              checked={isChecked}
+              onChange={(e) => handleSelectionChange(node, e.target.checked)}
+            />
+            <span className="directory-name">{name}</span>
+          </label>
+        </div>
         <div className="directory-children">
           {Object.entries(node.children).map(([childName, childNode]) => (
             <TreeNode 
